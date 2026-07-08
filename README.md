@@ -4,6 +4,8 @@ A Kelly criterion bet size calculator for [Manifold Markets](https://manifold.ma
 
 **Live site:** https://danielberd.github.io/kelly-manifold/
 
+There is also a bare-bones variant at [/mini.html](https://danielberd.github.io/kelly-manifold/mini.html): same math, no styling, you pick the YES/NO side yourself, and it fetches on a button click instead of as you type. No bet placement.
+
 ## How it works
 
 Enter your Manifold username, a market URL, and your probability estimate. The calculator recommends the bet that maximizes expected log wealth, accounting for:

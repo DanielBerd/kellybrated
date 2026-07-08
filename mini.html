@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kelly bet size for Manifold (mini)</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 24px auto; padding: 0 12px; line-height: 1.4; }
+  label { display: block; margin-top: 10px; }
+  input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px; font: inherit; }
+  fieldset { margin-top: 10px; padding: 6px 10px; }
+  fieldset label { display: inline; margin: 0 14px 0 0; }
+  button { margin-top: 14px; padding: 6px 18px; font: inherit; }
+  #out { white-space: pre-line; margin-top: 16px; border-top: 1px solid #999; padding-top: 12px; }
+  .err { color: #b00020; }
+  footer { margin-top: 24px; font-size: 0.85em; color: #666; }
+</style>
+</head>
+<body>
+<h3>Kelly bet size for Manifold (mini)</h3>
+
+<label>Manifold username <input type="text" id="user" autocomplete="off" spellcheck="false"></label>
+<label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
+<label>Your probability estimate (%) <input type="number" id="prob" min="0.1" max="99.9" step="any"></label>
+<label>Deferral factor (%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
+<fieldset>
+  <legend>Bet side</legend>
+  <label><input type="radio" name="side" value="YES" checked> YES</label>
+  <label><input type="radio" name="side" value="NO"> NO</label>
+</fieldset>
+<button id="go">Calculate</button>
+
+<div id="out"></div>
+
+<footer><a href="index.html">Full version</a> · <a href="https://github.com/DanielBerd/kelly-manifold">source</a></footer>
+
+<script>
+"use strict";
+const API = "https://api.manifold.markets/v0";
+const $ = id => document.getElementById(id);
+const r = x => Math.round(x).toLocaleString("en-US");
+const pct = x => (100 * x).toFixed(1) + "%";
+
+async function j(url) {
+  const res = await fetch(url);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
+  return body;
+}
+
+// "https://manifold.markets/creator/some-slug?x#y" -> "some-slug"; bare slugs pass through
+function slug(text) {
+  const parts = text.trim().split(/[?#]/)[0].split("/").filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
+// Manifold Maniswap CPMM
+const prob = (pool, p) => p * pool.NO / (p * pool.NO + (1 - p) * pool.YES);
+function betInfo(m, bet, side) {
+  const y = m.pool.YES, n = m.pool.NO, p = m.p;
+  const k = y ** p * n ** (1 - p);
+  const shares = side === "YES"
+    ? y + bet - (k * (bet + n) ** (p - 1)) ** (1 / p)
+    : n + bet - (k * (bet + y) ** -p) ** (1 / (1 - p));
+  const pool = side === "YES"
+    ? { YES: y + bet - shares, NO: n + bet }
+    : { YES: y + bet, NO: n + bet - shares };
+  return { shares, newProb: prob(pool, p) };
+}
+
+function maximize(f, lo, hi, iters = 100) {
+  const phi = (Math.sqrt(5) - 1) / 2;
+  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
+  for (let i = 0; i < iters; i++) {
+    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
+    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
+  }
+  return (a + b) / 2;
+}
+
+$("go").onclick = async () => {
+  const out = $("out");
+  out.className = "";
+  out.textContent = "Loading…";
+  try {
+    const pu = parseFloat($("prob").value) / 100;
+    const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
+    if (!(pu > 0 && pu < 1)) throw new Error("Probability estimate must be between 0 and 100.");
+    const side = document.querySelector("input[name=side]:checked").value;
+
+    const u = await j(`${API}/user/${encodeURIComponent($("user").value.trim())}`);
+    const m = await j(`${API}/slug/${encodeURIComponent(slug($("market").value))}`);
+    if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") throw new Error("Only binary (YES/NO) markets are supported.");
+    if (m.isResolved) throw new Error("This market has already resolved.");
+
+    let loans = 0;
+    try { loans = (await j(`${API}/get-user-portfolio?userId=${u.id}`)).loanTotal || 0; } catch (e) {}
+    let eYes = 0, eNo = 0;
+    try {
+      for (const met of await j(`${API}/market/${m.id}/positions?userId=${u.id}`)) {
+        if (!met.answerId) { eYes += met.totalShares?.YES || 0; eNo += met.totalShares?.NO || 0; }
+      }
+    } catch (e) {}
+
+    const B = u.balance - loans;
+    if (B <= 1) throw new Error(`Balance minus loans is M${r(B)} — nothing to bet.`);
+    const pm = prob(m.pool, m.p);
+    const pYes = f * pu + (1 - f) * pm;  // deferral-adjusted P(YES), = fractional Kelly
+
+    // maximize expected log wealth over the bet amount
+    const J = M => {
+      const s = betInfo(m, M, side).shares;
+      const wYes = B - M + eYes + (side === "YES" ? s : 0);
+      const wNo  = B - M + eNo  + (side === "NO"  ? s : 0);
+      return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
+    };
+    const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
+
+    const lines = [
+      `${u.name}: balance M${r(u.balance)}, loans M${r(loans)} → bankroll M${r(B)}`,
+      `Market: ${pct(pm)} — ${m.question}`,
+    ];
+    if (eYes || eNo) lines.push(`Your position: ${r(Math.abs(eYes - eNo))} ${eYes > eNo ? "YES" : "NO"} shares`);
+    lines.push(`Deferral-adjusted estimate: ${pct(pYes)} YES`, "");
+
+    const hasEdge = side === "YES" ? pYes > pm : pYes < pm;
+    if (!hasEdge || M < 1) {
+      lines.push(`Recommended bet on ${side}: M0 — at ${pct(pYes)} you have no edge on ${side} at the current price.`);
+    } else {
+      const { shares, newProb } = betInfo(m, M, side);
+      const pWin = side === "YES" ? pYes : 1 - pYes;
+      lines.push(
+        `Recommended bet: M${r(M)} on ${side}`,
+        `Payout if ${side}: M${r(shares)} (profit M${r(shares - M)})`,
+        `New market probability: ${pct(newProb)}`,
+        `Expected profit: M${r(pWin * shares - M)}`
+      );
+    }
+    out.textContent = lines.join("\n");
+  } catch (e) {
+    out.className = "err";
+    out.textContent = "Error: " + e.message;
+  }
+};
+</script>
+</body>
+</html>
