@@ -12,7 +12,7 @@ Enter your Manifold username, a market URL, and your probability estimate. The c
 
 - **Market liquidity** — your bet moves the price (Manifold's Maniswap CPMM math), so recommendations shrink in thin markets.
 - **Your existing position** in the market.
-- **Loans** — bankroll is balance minus loans.
+- **Loans** — bankroll is balance minus loans by default; both pages have an "ignore loans" toggle to use the full balance instead.
 - **Deferral factor** (fractional Kelly): the calculation uses a probability that is f of the way from the market's estimate to yours. 50% (the default) is equivalent to half-Kelly.
 
 It ignores limit orders in the order book and correlations with the rest of your portfolio (unlike the full [manifolio](https://github.com/Will-Howard/manifolio), which this is a simplified rebuild of).

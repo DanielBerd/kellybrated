@@ -116,6 +116,7 @@
   summary { font-weight: bold; cursor: pointer; }
   details .inner { margin: 12px 0 0 4px; }
   .hint { font-style: italic; margin: 2px 0 10px; }
+  .check-label { display: block; font-weight: bold; margin-top: 16px; cursor: pointer; }
 
   footer { margin-top: 40px; font-size: 0.85rem; color: var(--muted); }
 </style>
@@ -208,13 +209,15 @@
       <label class="section-label" for="deferral-input">Deferral factor (%)</label>
       <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
       <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
+      <label class="check-label"><input type="checkbox" id="ignore-loans"> Ignore loans — use the full balance as the bankroll</label>
     </div>
   </details>
 
   <footer>
     A single-file rebuild of <a href="https://github.com/Will-Howard/manifolio" target="_blank" rel="noopener">manifolio</a>.
     The recommendation maximizes expected log wealth, accounting for the price impact of your bet (CPMM liquidity)
-    and your existing position in this market. Bankroll = balance − loans. It ignores limit orders in the
+    and your existing position in this market. Bankroll = balance − loans (or the full balance with the
+    "ignore loans" toggle in advanced options). It ignores limit orders in the
     order book and correlations with the rest of your portfolio. Your API key is only sent to the Manifold API.
   </footer>
 </div>
@@ -315,8 +318,9 @@
     // market's estimate to yours (equivalent to fractional Kelly).
     const pYes = f * pUser + (1 - f) * pMarket;
 
-    const B = user.balance - user.loans;
-    if (B <= 1) return { error: "Balance minus loans is M" + Math.round(B) + " — nothing safe to bet." };
+    const ignoreLoans = $("ignore-loans").checked;
+    const B = user.balance - (ignoreLoans ? 0 : user.loans);
+    if (B <= 1) return { error: (ignoreLoans ? "Balance is M" : "Balance minus loans is M") + Math.round(B) + " — nothing safe to bet." };
 
     const outcome = pYes > pMarket ? "YES" : "NO";
     if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (deferral-adjusted) estimate matches the market — no bet." };
@@ -600,6 +604,7 @@
     if (m) params.set("market", m);
     if (p) params.set("prob", p);
     if (d && d !== "50") params.set("deferral", d);
+    if ($("ignore-loans").checked) params.set("ignoreLoans", "1");
     const qs = params.toString();
     history.replaceState(null, "", qs ? "?" + qs : location.pathname);
   }
@@ -612,6 +617,7 @@
     if (market) $("market-input").value = market;
     if (q.get("prob")) $("prob-input").value = q.get("prob");
     if (q.get("deferral")) $("deferral-input").value = q.get("deferral");
+    if (q.get("ignoreLoans") === "1") $("ignore-loans").checked = true;
   }
 
   // ---------- wiring ----------
@@ -626,6 +632,7 @@
   $("market-clear").addEventListener("click", () => { $("market-input").value = ""; loadMarket(); });
   $("prob-input").addEventListener("input", debounce(refresh, 300));
   $("deferral-input").addEventListener("input", debounce(refresh, 300));
+  $("ignore-loans").addEventListener("change", refresh);
   $("bet-amount").addEventListener("input", renderBetPanel);
   $("api-key").addEventListener("input", renderBetPanel);
   $("btn-yes").addEventListener("click", () => { panelOutcome = "YES"; renderBetPanel(); });

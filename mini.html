@@ -23,6 +23,7 @@
 <label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
 <label>Your probability estimate (%) <input type="number" id="prob" min="0.1" max="99.9" step="any"></label>
 <label>Deferral factor (%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
+<label><input type="checkbox" id="noloans"> Ignore loans — bankroll = full balance</label>
 <fieldset>
   <legend>Bet side</legend>
   <label><input type="radio" name="side" value="YES" checked> YES</label>
@@ -93,8 +94,9 @@ $("go").onclick = async () => {
     if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") throw new Error("Only binary (YES/NO) markets are supported.");
     if (m.isResolved) throw new Error("This market has already resolved.");
 
+    const ignoreLoans = $("noloans").checked;
     let loans = 0;
-    try { loans = (await j(`${API}/get-user-portfolio?userId=${u.id}`)).loanTotal || 0; } catch (e) {}
+    if (!ignoreLoans) try { loans = (await j(`${API}/get-user-portfolio?userId=${u.id}`)).loanTotal || 0; } catch (e) {}
     let eYes = 0, eNo = 0;
     try {
       for (const met of await j(`${API}/market/${m.id}/positions?userId=${u.id}`)) {
@@ -103,7 +105,7 @@ $("go").onclick = async () => {
     } catch (e) {}
 
     const B = u.balance - loans;
-    if (B <= 1) throw new Error(`Balance minus loans is M${r(B)} — nothing to bet.`);
+    if (B <= 1) throw new Error(`${ignoreLoans ? "Balance" : "Balance minus loans"} is M${r(B)} — nothing to bet.`);
     const pm = prob(m.pool, m.p);
     const pYes = f * pu + (1 - f) * pm;  // deferral-adjusted P(YES), = fractional Kelly
 
@@ -117,7 +119,9 @@ $("go").onclick = async () => {
     const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
 
     const lines = [
-      `${u.name}: balance M${r(u.balance)}, loans M${r(loans)} → bankroll M${r(B)}`,
+      ignoreLoans
+        ? `${u.name}: balance M${r(u.balance)} → bankroll M${r(B)} (loans ignored)`
+        : `${u.name}: balance M${r(u.balance)}, loans M${r(loans)} → bankroll M${r(B)}`,
       `Market: ${pct(pm)} — ${m.question}`,
     ];
     if (eYes || eNo) lines.push(`Your position: ${r(Math.abs(eYes - eNo))} ${eYes > eNo ? "YES" : "NO"} shares`);
