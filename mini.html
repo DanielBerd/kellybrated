@@ -8,8 +8,6 @@
   body { font-family: sans-serif; max-width: 480px; margin: 24px auto; padding: 0 12px; line-height: 1.4; }
   label { display: block; margin-top: 10px; }
   input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px; font: inherit; }
-  fieldset { margin-top: 10px; padding: 6px 10px; }
-  fieldset label { display: inline; margin: 0 14px 0 0; }
   button { margin-top: 14px; padding: 6px 18px; font: inherit; }
   #out { white-space: pre-line; margin-top: 16px; border-top: 1px solid #999; padding-top: 12px; }
   .err { color: #b00020; }
@@ -24,11 +22,6 @@
 <label>Your probability estimate (%) <input type="number" id="prob" min="0.1" max="99.9" step="any"></label>
 <label>Deferral factor (%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
 <label><input type="checkbox" id="noloans"> Ignore loans — bankroll = full balance</label>
-<fieldset>
-  <legend>Bet side</legend>
-  <label><input type="radio" name="side" value="YES" checked> YES</label>
-  <label><input type="radio" name="side" value="NO"> NO</label>
-</fieldset>
 <button id="go">Calculate</button>
 
 <div id="out"></div>
@@ -87,7 +80,6 @@ $("go").onclick = async () => {
     const pu = parseFloat($("prob").value) / 100;
     const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
     if (!(pu > 0 && pu < 1)) throw new Error("Probability estimate must be between 0 and 100.");
-    const side = document.querySelector("input[name=side]:checked").value;
 
     const u = await j(`${API}/user/${encodeURIComponent($("user").value.trim())}`);
     const m = await j(`${API}/slug/${encodeURIComponent(slug($("market").value))}`);
@@ -108,6 +100,7 @@ $("go").onclick = async () => {
     if (B <= 1) throw new Error(`${ignoreLoans ? "Balance" : "Balance minus loans"} is M${r(B)} — nothing to bet.`);
     const pm = prob(m.pool, m.p);
     const pYes = f * pu + (1 - f) * pm;  // deferral-adjusted P(YES), = fractional Kelly
+    const side = pYes > pm ? "YES" : "NO";  // bet side follows from the estimate
 
     // maximize expected log wealth over the bet amount
     const J = M => {
@@ -127,9 +120,8 @@ $("go").onclick = async () => {
     if (eYes || eNo) lines.push(`Your position: ${r(Math.abs(eYes - eNo))} ${eYes > eNo ? "YES" : "NO"} shares`);
     lines.push(`Deferral-adjusted estimate: ${pct(pYes)} YES`, "");
 
-    const hasEdge = side === "YES" ? pYes > pm : pYes < pm;
-    if (!hasEdge || M < 1) {
-      lines.push(`Recommended bet on ${side}: M0 — at ${pct(pYes)} you have no edge on ${side} at the current price.`);
+    if (Math.abs(pYes - pm) < 1e-9 || M < 1) {
+      lines.push(`Recommended bet: M0 — your deferral-adjusted estimate is too close to the market price.`);
     } else {
       const { shares, newProb } = betInfo(m, M, side);
       const pWin = side === "YES" ? pYes : 1 - pYes;

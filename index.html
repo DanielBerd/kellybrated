@@ -89,14 +89,13 @@
   .bet-row .m { font-weight: bold; }
   #bet-amount { flex: 1; min-width: 120px; max-width: 380px;
     font: inherit; padding: 8px 10px; border: 2px solid #444; border-radius: 5px; }
-  .side-btn {
-    font: inherit; font-weight: bold; letter-spacing: 0.5px;
-    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  .side-badge {
+    font-weight: bold; letter-spacing: 0.5px;
+    padding: 8px 20px; border-radius: 8px;
+    background: #c9c9c9; color: #fff;
   }
-  .side-btn.yes { border: 2px solid var(--green); color: var(--green); background: #fff; }
-  .side-btn.yes.selected { background: var(--green); color: #fff; }
-  .side-btn.no { border: 2px solid var(--red); color: var(--red); background: #fff; }
-  .side-btn.no.selected { background: var(--red); color: #fff; }
+  .side-badge.yes { background: var(--green); }
+  .side-badge.no { background: var(--red); }
 
   .small-label { display: block; font-weight: bold; margin: 16px 0 6px; }
   .bet-actions { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
@@ -112,11 +111,9 @@
   #bet-status.error { color: var(--red); }
   #bet-status.success { color: var(--green); }
 
-  details { margin-top: 26px; }
-  summary { font-weight: bold; cursor: pointer; }
-  details .inner { margin: 12px 0 0 4px; }
   .hint { font-style: italic; margin: 2px 0 10px; }
   .check-label { display: block; font-weight: bold; margin-top: 16px; cursor: pointer; }
+  .mt { margin-top: 18px; }
 
   footer { margin-top: 40px; font-size: 0.85rem; color: var(--muted); }
 </style>
@@ -174,6 +171,11 @@
     <label class="section-label" for="prob-input">Probability estimate (%)</label>
     <input class="num-input" id="prob-input" type="number" min="0.1" max="99.9" step="any" inputmode="decimal">
 
+    <label class="section-label mt" for="deferral-input">Deferral factor (%)</label>
+    <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
+    <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
+    <label class="check-label"><input type="checkbox" id="ignore-loans"> Ignore loans — use the full balance as the bankroll</label>
+
     <div id="results" class="hidden">
       <div class="result-row"><span><b>Recommended bet</b>:</span><span class="val" id="rec-bet">—</span></div>
       <div class="result-row" id="rec-return-row"><span>Expected return of this bet on its own:</span><span class="val" id="rec-return">—</span></div>
@@ -188,8 +190,7 @@
       <span class="m">M</span>
       <input id="bet-amount" type="number" min="1" step="1" inputmode="numeric">
       <span>on</span>
-      <button class="side-btn yes" id="btn-yes">YES</button>
-      <button class="side-btn no" id="btn-no">NO</button>
+      <span class="side-badge" id="bet-side">—</span>
     </div>
     <div class="result-row"><span>Payout if <span id="payout-side" class="green">YES</span>:</span><span class="val" id="payout-val">M—</span></div>
     <div class="result-row"><span>New probability:</span><span class="val" id="new-prob">—</span></div>
@@ -202,22 +203,11 @@
     <div id="bet-status"></div>
   </div>
 
-  <!-- Advanced options -->
-  <details open>
-    <summary>Advanced options</summary>
-    <div class="inner">
-      <label class="section-label" for="deferral-input">Deferral factor (%)</label>
-      <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
-      <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
-      <label class="check-label"><input type="checkbox" id="ignore-loans"> Ignore loans — use the full balance as the bankroll</label>
-    </div>
-  </details>
-
   <footer>
     A single-file rebuild of <a href="https://github.com/Will-Howard/manifolio" target="_blank" rel="noopener">manifolio</a>.
     The recommendation maximizes expected log wealth, accounting for the price impact of your bet (CPMM liquidity)
     and your existing position in this market. Bankroll = balance − loans (or the full balance with the
-    "ignore loans" toggle in advanced options). It ignores limit orders in the
+    ignore-loans toggle). It ignores limit orders in the
     order book and correlations with the rest of your portfolio. Your API key is only sent to the Manifold API.
   </footer>
 </div>
@@ -529,24 +519,25 @@
 
     // sync the bet panel to the recommendation
     $("bet-amount").value = out.amount;
-    panelOutcome = out.outcome;
   }
 
-  let panelOutcome = "YES";
+  // The side is an output of the calculation, not a user choice.
   function renderBetPanel() {
-    $("btn-yes").classList.toggle("selected", panelOutcome === "YES");
-    $("btn-no").classList.toggle("selected", panelOutcome === "NO");
+    const outcome = state.rec ? state.rec.outcome : null;
+    const badge = $("bet-side");
+    badge.textContent = outcome || "—";
+    badge.className = "side-badge" + (outcome ? " " + outcome.toLowerCase() : "");
     const sideEl = $("payout-side");
-    sideEl.textContent = panelOutcome;
-    sideEl.className = panelOutcome === "YES" ? "green" : "red";
+    sideEl.textContent = outcome || "—";
+    sideEl.className = outcome === "NO" ? "red" : "green";
 
     const amount = parseFloat($("bet-amount").value);
     const m = state.market;
-    if (!m || !isFinite(amount) || amount <= 0) {
+    if (!m || !outcome || !isFinite(amount) || amount <= 0) {
       $("payout-val").textContent = "M—";
       $("new-prob").textContent = "—";
     } else {
-      const { shares, newProb } = getBetInfo(m, amount, panelOutcome);
+      const { shares, newProb } = getBetInfo(m, amount, outcome);
       const prob = cpmmProbability(m.pool, m.p);
       const deltaPts = 100 * (newProb - prob);
       $("payout-val").textContent = fmtM(shares);
@@ -555,7 +546,7 @@
     }
 
     const key = $("api-key").value.trim();
-    $("place-bet").disabled = !(key && m && isFinite(amount) && amount >= 1);
+    $("place-bet").disabled = !(key && m && outcome && isFinite(amount) && amount >= 1);
   }
 
   function refresh() {
@@ -570,7 +561,8 @@
     const status = $("bet-status");
     const amount = Math.round(parseFloat($("bet-amount").value));
     const key = $("api-key").value.trim();
-    if (!state.market || !isFinite(amount) || amount < 1 || !key) return;
+    if (!state.market || !state.rec || !isFinite(amount) || amount < 1 || !key) return;
+    const outcome = state.rec.outcome;
 
     btn.disabled = true;
     status.className = "";
@@ -579,10 +571,10 @@
       const bet = await fetchJSON(`${API}/bet`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Key " + key },
-        body: JSON.stringify({ amount, contractId: state.market.id, outcome: panelOutcome }),
+        body: JSON.stringify({ amount, contractId: state.market.id, outcome }),
       });
       status.className = "success";
-      status.textContent = "Placed " + fmtM(amount) + " on " + panelOutcome +
+      status.textContent = "Placed " + fmtM(amount) + " on " + outcome +
         (bet && bet.shares ? " — received " + fmtM(bet.shares) + " shares." : ".");
       // refresh user, market and position so the next recommendation is up to date
       await Promise.all([loadUser(), loadMarket()]);
@@ -635,8 +627,6 @@
   $("ignore-loans").addEventListener("change", refresh);
   $("bet-amount").addEventListener("input", renderBetPanel);
   $("api-key").addEventListener("input", renderBetPanel);
-  $("btn-yes").addEventListener("click", () => { panelOutcome = "YES"; renderBetPanel(); });
-  $("btn-no").addEventListener("click", () => { panelOutcome = "NO"; renderBetPanel(); });
   $("place-bet").addEventListener("click", placeBet);
 
   initFromUrl();
