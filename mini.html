@@ -12,6 +12,13 @@
   #out { white-space: pre-line; margin-top: 16px; border-top: 1px solid #999; padding-top: 12px; }
   .err { color: #b00020; }
   footer { margin-top: 24px; font-size: 0.85em; color: #666; }
+  /* compact layout when framed (e.g. inside the browser-extension popup) */
+  body.embedded { margin: 8px auto; font-size: 15px; }
+  body.embedded h3 { margin: 0 0 2px; font-size: 1.05em; }
+  body.embedded label { margin-top: 6px; }
+  body.embedded button { margin-top: 10px; padding: 4px 14px; }
+  body.embedded #out { margin-top: 10px; padding-top: 8px; }
+  body.embedded footer { display: none; }
 </style>
 </head>
 <body>
@@ -141,7 +148,17 @@ $("go").onclick = async () => {
   }
 };
 
-try { if (!$("user").value) $("user").value = localStorage.getItem(LAST_USER_KEY) || ""; } catch (e) {}
+// prefill from URL params (as sent by the browser extension), falling back to
+// the username remembered from the last successful calculation
+try {
+  const q = new URLSearchParams(location.search);
+  $("user").value = q.get("user") || localStorage.getItem(LAST_USER_KEY) || "";
+  if (q.get("market")) $("market").value = q.get("market");
+  if (q.get("prob")) $("prob").value = q.get("prob");
+  if (q.get("deferral")) $("deferral").value = q.get("deferral");
+  if (q.get("ignoreLoans") === "1") $("noloans").checked = true;
+} catch (e) {}
+if (window.self !== window.top) document.body.classList.add("embedded");
 </script>
 </body>
 </html>

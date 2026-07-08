@@ -14,10 +14,11 @@ async function currentTabUrl() {
 (async () => {
   let username = null;
   try { username = (await api.storage.local.get("username")).username || null; } catch (e) { /* first run */ }
-  const url = buildCalculatorUrl(await currentTabUrl(), username);
-  document.getElementById("frame").src = url;
+  const tabUrl = await currentTabUrl();
+  // the panel embeds the mini version; "Open in tab" goes to the full page
+  document.getElementById("frame").src = buildCalculatorUrl(tabUrl, username, "mini.html");
   document.getElementById("open-tab").addEventListener("click", async () => {
-    await api.tabs.create({ url });
+    await api.tabs.create({ url: buildCalculatorUrl(tabUrl, username) });
     window.close();
   });
 })();

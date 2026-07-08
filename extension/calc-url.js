@@ -21,11 +21,13 @@ function marketSlugFromUrl(urlText) {
   return parts[1];
 }
 
-function buildCalculatorUrl(tabUrl, username) {
+// page: "" for the full calculator, "mini.html" for the bare-bones variant
+function buildCalculatorUrl(tabUrl, username, page) {
   const params = new URLSearchParams();
   const slug = tabUrl ? marketSlugFromUrl(tabUrl) : null;
   if (slug) params.set("market", slug);
   if (username) params.set("user", username);
   const qs = params.toString();
-  return qs ? CALCULATOR_URL + "?" + qs : CALCULATOR_URL;
+  const base = CALCULATOR_URL + (page || "");
+  return qs ? base + "?" + qs : base;
 }
