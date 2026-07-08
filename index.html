@@ -410,6 +410,7 @@
       $("user-card").classList.remove("hidden");
       input.classList.add("ok");
       setNote("user-note", "");
+      try { localStorage.setItem(LAST_USER_KEY, state.user.username); } catch (e) { /* storage blocked */ }
     } catch (e) {
       if (seq !== userSeq) return;
       input.classList.add("bad");
@@ -589,6 +590,8 @@
   }
 
   // ---------- URL state ----------
+  const LAST_USER_KEY = "kelly-manifold:lastUser";
+
   function syncUrl() {
     const params = new URLSearchParams();
     const u = $("username-input").value.trim();
@@ -606,8 +609,9 @@
 
   function initFromUrl() {
     const q = new URLSearchParams(location.search);
-    const user = q.get("user") || q.get("usernameInput");
+    let user = q.get("user") || q.get("usernameInput");
     const market = q.get("market") || q.get("marketInput");
+    if (!user) try { user = localStorage.getItem(LAST_USER_KEY); } catch (e) { /* storage blocked */ }
     if (user) $("username-input").value = user;
     if (market) $("market-input").value = market;
     if (q.get("prob")) $("prob-input").value = q.get("prob");

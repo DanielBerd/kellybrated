@@ -31,6 +31,7 @@
 <script>
 "use strict";
 const API = "https://api.manifold.markets/v0";
+const LAST_USER_KEY = "kelly-manifold:lastUser";  // shared with index.html
 const $ = id => document.getElementById(id);
 const r = x => Math.round(x).toLocaleString("en-US");
 const pct = x => (100 * x).toFixed(1) + "%";
@@ -82,6 +83,7 @@ $("go").onclick = async () => {
     if (!(pu > 0 && pu < 1)) throw new Error("Probability estimate must be between 0 and 100.");
 
     const u = await j(`${API}/user/${encodeURIComponent($("user").value.trim())}`);
+    try { localStorage.setItem(LAST_USER_KEY, u.username); } catch (e) {}
     const m = await j(`${API}/slug/${encodeURIComponent(slug($("market").value))}`);
     if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") throw new Error("Only binary (YES/NO) markets are supported.");
     if (m.isResolved) throw new Error("This market has already resolved.");
@@ -138,6 +140,8 @@ $("go").onclick = async () => {
     out.textContent = "Error: " + e.message;
   }
 };
+
+try { if (!$("user").value) $("user").value = localStorage.getItem(LAST_USER_KEY) || ""; } catch (e) {}
 </script>
 </body>
 </html>
