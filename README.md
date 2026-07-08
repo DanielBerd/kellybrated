@@ -21,7 +21,7 @@ Optionally, paste your Manifold API key (from your [profile page](https://manifo
 
 ## Browser extension
 
-`extension/` contains a small Chrome/Firefox extension (one shared codebase, Manifest V3). Clicking its toolbar button opens the live calculator in a new tab, prefilled with:
+`extension/` contains a small Chrome/Firefox extension (one shared codebase, Manifest V3). Clicking its toolbar button opens the live calculator in a compact dropdown panel (with an "Open in tab ⧉" button for the full page), prefilled with:
 
 - **the market you're viewing**, taken from the current tab's URL if it's a `manifold.markets/{creator}/{slug}` page, and
 - **your Manifold username**, which a content script detects from Manifold's cached signed-in user whenever you browse manifold.markets.

@@ -8,7 +8,7 @@
   "host_permissions": ["https://manifold.markets/*"],
   "background": {
     "service_worker": "background.js",
-    "scripts": ["background.js"]
+    "scripts": ["calc-url.js", "background.js"]
   },
   "content_scripts": [
     {
@@ -19,6 +19,7 @@
   ],
   "action": {
     "default_title": "Kelly bet size for this market",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

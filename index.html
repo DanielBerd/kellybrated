@@ -116,6 +116,15 @@
   .mt { margin-top: 18px; }
 
   footer { margin-top: 40px; font-size: 0.85rem; color: var(--muted); }
+
+  /* compact layout when framed (e.g. inside the browser-extension popup) */
+  body.embedded { font-size: 15px; }
+  body.embedded .container { padding: 10px 14px 24px; }
+  body.embedded h1 { font-size: 1.4rem; display: inline; margin-right: 8px; }
+  body.embedded .subtitle { display: inline; font-size: 0.85rem; }
+  body.embedded .header-rule { margin: 6px 0 12px; }
+  body.embedded hr { margin: 14px 0; }
+  body.embedded footer { display: none; }
 </style>
 </head>
 <body>
@@ -636,6 +645,7 @@
   $("api-key").addEventListener("input", renderBetPanel);
   $("place-bet").addEventListener("click", placeBet);
 
+  if (window.self !== window.top) document.body.classList.add("embedded");
   initFromUrl();
   if ($("username-input").value) loadUser();
   if ($("market-input").value) loadMarket();
