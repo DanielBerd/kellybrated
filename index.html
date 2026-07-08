@@ -195,7 +195,7 @@
     <div class="result-row"><span>Payout if <span id="payout-side" class="green">YES</span>:</span><span class="val" id="payout-val">M—</span></div>
     <div class="result-row"><span>New probability:</span><span class="val" id="new-prob">—</span></div>
 
-    <label class="small-label" for="api-key">API key (found <a href="https://manifold.markets/profile" target="_blank" rel="noopener">here</a>)</label>
+    <label class="small-label" for="api-key">API key (found <a href="https://manifold.markets" id="api-key-link" target="_blank" rel="noopener">here</a>)</label>
     <div class="bet-actions">
       <input id="api-key" placeholder='e.g. "7373176d-01c5-4318-a21b-8ae7cb24caa7"' autocomplete="off" spellcheck="false">
       <button id="place-bet" disabled>PLACE BET</button>
@@ -376,6 +376,7 @@
     const seq = ++userSeq;
     state.user = null;
     $("user-card").classList.add("hidden");
+    $("api-key-link").href = "https://manifold.markets";
     input.classList.remove("ok", "bad");
     setNote("user-note", "");
     if (!username) { refresh(); return; }
@@ -393,10 +394,12 @@
       if (seq !== userSeq) return;
 
       state.user = {
-        id: u.id, name: u.name || u.username, avatarUrl: u.avatarUrl,
+        id: u.id, username: u.username, name: u.name || u.username, avatarUrl: u.avatarUrl,
         balance: u.balance, loans,
         portfolio: u.balance - loans + invested,
       };
+      // the API key lives on the user's own profile page under account settings
+      $("api-key-link").href = "https://manifold.markets/" + encodeURIComponent(u.username) + "?tab=account+settings";
       $("user-name").textContent = state.user.name;
       $("user-balance").textContent = fmtM(state.user.balance);
       $("user-loans").textContent = fmtM(state.user.loans);
