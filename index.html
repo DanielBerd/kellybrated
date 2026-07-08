@@ -373,6 +373,7 @@
   async function loadUser() {
     const input = $("username-input");
     const username = input.value.trim();
+    storeUsername(username);
     const seq = ++userSeq;
     state.user = null;
     $("user-card").classList.add("hidden");
@@ -589,6 +590,17 @@
   }
 
   // ---------- URL state ----------
+  // The browser extension opens this page with only ?market=<url>, so the
+  // username has to survive page loads (the original manifolio kept it in
+  // localStorage the same way). Storage can be unavailable — e.g. in the
+  // extension popup with third-party cookies blocked — treat that as "none".
+  function loadStoredUsername() {
+    try { return localStorage.getItem("username") || ""; } catch (e) { return ""; }
+  }
+  function storeUsername(u) {
+    try { localStorage.setItem("username", u); } catch (e) { /* storage unavailable */ }
+  }
+
   function syncUrl() {
     const params = new URLSearchParams();
     const u = $("username-input").value.trim();
@@ -606,7 +618,7 @@
 
   function initFromUrl() {
     const q = new URLSearchParams(location.search);
-    const user = q.get("user") || q.get("usernameInput");
+    const user = q.get("user") || q.get("username") || q.get("usernameInput") || loadStoredUsername();
     const market = q.get("market") || q.get("marketInput");
     if (user) $("username-input").value = user;
     if (market) $("market-input").value = market;

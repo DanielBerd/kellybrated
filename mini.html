@@ -72,6 +72,17 @@ function maximize(f, lo, hi, iters = 100) {
   return (a + b) / 2;
 }
 
+// prefill from query params (the browser extension opens this with ?market=<url>)
+{
+  const q = new URLSearchParams(location.search);
+  const user = q.get("user") || q.get("username") || q.get("usernameInput");
+  const market = q.get("market") || q.get("marketInput");
+  if (user) $("user").value = user;
+  if (market) $("market").value = market;
+  if (q.get("prob")) $("prob").value = q.get("prob");
+  if (q.get("deferral")) $("deferral").value = q.get("deferral");
+}
+
 $("go").onclick = async () => {
   const out = $("out");
   out.className = "";

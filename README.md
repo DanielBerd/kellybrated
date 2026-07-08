@@ -19,6 +19,14 @@ It ignores limit orders in the order book and correlations with the rest of your
 
 Optionally, paste your Manifold API key (from your [profile page](https://manifold.markets/profile)) to place the bet directly. The key is only ever sent to the Manifold API.
 
+## Browser extension
+
+`chrome-extension/` contains a Chrome extension (adapted from [manifolio's](https://github.com/Will-Howard/manifolio/tree/master/chrome-extension)) that opens the calculator in a popup with the market field prefilled from the manifold.markets page you are on. The original extension points at the dead manifol.io, so it can't fill anything on this site — this copy points here instead.
+
+To install: `chrome://extensions` → enable Developer mode → "Load unpacked" → select the `chrome-extension` folder.
+
+The extension only passes the market URL (`?market=…`); the username field fills itself from the last username you typed, which the page now remembers in localStorage. The calculator also accepts `?user=`/`?username=`, `?prob=` and `?deferral=` query parameters, on both `index.html` and `mini.html`.
+
 ## Development
 
 Everything is in `index.html`. To preview locally on Windows without node/python:
