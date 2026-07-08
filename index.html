@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manifolio — bet size calculator for Manifold</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<style>
+  :root {
+    --green: #2a9d8f;
+    --red: #cf4433;
+    --input-green: #3d8a40;
+    --ink: #111;
+    --muted: #666;
+    --bg: #f2f2f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  .container { max-width: 700px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  h1 { font-size: 2.4rem; margin: 0 0 2px; }
+  .subtitle { font-style: italic; margin: 0 0 10px; }
+  a { color: #17395c; font-weight: bold; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .header-rule { border-bottom: 4px double #444; margin-bottom: 18px; }
+
+  hr { border: none; border-top: 1px solid #bbb; margin: 22px 0; }
+
+  .section-label { display: block; font-weight: bold; margin-bottom: 8px; }
+
+  .input-row { display: flex; align-items: center; gap: 6px; }
+  .input-row input {
+    flex: 1; max-width: 520px;
+    font: inherit; padding: 8px 10px;
+    border: 2px solid #999; border-radius: 5px;
+    background: #fff; outline: none;
+  }
+  .input-row input.ok  { border-color: var(--input-green); }
+  .input-row input.bad { border-color: var(--red); }
+  .clear-btn {
+    border: none; background: none; color: #999;
+    font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
+  }
+  .clear-btn:hover { color: #444; }
+
+  .info-card { display: flex; gap: 18px; margin: 16px 0 4px 8px; align-items: flex-start; }
+  .info-card.hidden { display: none; }
+  .avatar {
+    width: 82px; height: 82px; object-fit: cover;
+    background: #ddd; flex: none;
+  }
+  .avatar.round { border-radius: 50%; }
+  .avatar.rounded { border-radius: 12px; }
+  .info-rows { flex: 1; min-width: 0; max-width: 430px; }
+  .info-name { font-weight: bold; margin-bottom: 2px; overflow-wrap: anywhere; }
+  .info-row { display: flex; justify-content: space-between; gap: 12px; }
+  .info-row .val { font-weight: bold; text-align: right; white-space: nowrap; }
+
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .muted { color: var(--muted); }
+
+  .field-note { margin: 10px 0 0 4px; font-style: italic; }
+  .field-note.error { color: var(--red); }
+  .hidden { display: none; }
+
+  .num-input {
+    font: inherit; padding: 8px 10px; width: 100%; max-width: 520px;
+    border: 2px solid #444; border-radius: 5px; background: #fff; outline: none;
+  }
+
+  .result-row { display: flex; justify-content: space-between; gap: 16px; margin: 3px 0; }
+  .result-row .val { font-weight: bold; text-align: right; white-space: nowrap; }
+  #results { margin-top: 20px; }
+
+  .bet-panel {
+    border: 2.5px solid var(--ink); border-radius: 14px;
+    padding: 18px 18px 16px; margin: 26px 0 8px;
+    background: #fafaf8;
+  }
+  .bet-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bet-row .m { font-weight: bold; }
+  #bet-amount { flex: 1; min-width: 120px; max-width: 380px;
+    font: inherit; padding: 8px 10px; border: 2px solid #444; border-radius: 5px; }
+  .side-btn {
+    font: inherit; font-weight: bold; letter-spacing: 0.5px;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  }
+  .side-btn.yes { border: 2px solid var(--green); color: var(--green); background: #fff; }
+  .side-btn.yes.selected { background: var(--green); color: #fff; }
+  .side-btn.no { border: 2px solid var(--red); color: var(--red); background: #fff; }
+  .side-btn.no.selected { background: var(--red); color: #fff; }
+
+  .small-label { display: block; font-weight: bold; margin: 16px 0 6px; }
+  .bet-actions { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+  #api-key { flex: 1; min-width: 200px;
+    font: inherit; padding: 8px 10px; border: 2px solid #444; border-radius: 5px; }
+  #place-bet {
+    font: inherit; font-weight: bold; letter-spacing: 1px;
+    padding: 8px 22px; border-radius: 8px; border: none; cursor: pointer;
+    background: var(--green); color: #fff;
+  }
+  #place-bet:disabled { background: #c9c9c9; color: #f4f4f4; cursor: not-allowed; }
+  #bet-status { margin-top: 10px; font-style: italic; }
+  #bet-status.error { color: var(--red); }
+  #bet-status.success { color: var(--green); }
+
+  details { margin-top: 26px; }
+  summary { font-weight: bold; cursor: pointer; }
+  details .inner { margin: 12px 0 0 4px; }
+  .hint { font-style: italic; margin: 2px 0 10px; }
+
+  footer { margin-top: 40px; font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Manifolio</h1>
+  <p class="subtitle">Bet size calculator for <a href="https://manifold.markets" target="_blank" rel="noopener">Manifold</a>, read the docs <a href="https://github.com/DanielBerd/manifolio" target="_blank" rel="noopener">here</a></p>
+  <div class="header-rule"></div>
+
+  <!-- User -->
+  <section>
+    <label class="section-label" for="username-input">User</label>
+    <div class="input-row">
+      <input id="username-input" placeholder="Manifold username, e.g. WilliamHoward" autocomplete="off" spellcheck="false">
+      <button class="clear-btn" id="username-clear" title="Clear">×</button>
+    </div>
+    <div class="info-card hidden" id="user-card">
+      <img class="avatar round" id="user-avatar" alt="">
+      <div class="info-rows">
+        <div class="info-name" id="user-name"></div>
+        <div class="info-row"><span>Balance:</span><span class="val green" id="user-balance">M—</span></div>
+        <div class="info-row"><span>Total loans:</span><span class="val red" id="user-loans">M—</span></div>
+        <div class="info-row"><span>Portfolio value:</span><span class="val green" id="user-portfolio">M—</span></div>
+      </div>
+    </div>
+    <div class="field-note hidden" id="user-note"></div>
+  </section>
+
+  <hr>
+
+  <!-- Market -->
+  <section>
+    <label class="section-label" for="market-input">Market</label>
+    <div class="input-row">
+      <input id="market-input" placeholder="https://manifold.markets/... (or market slug)" autocomplete="off" spellcheck="false">
+      <button class="clear-btn" id="market-clear" title="Clear">×</button>
+    </div>
+    <div class="info-card hidden" id="market-card">
+      <img class="avatar rounded" id="market-image" alt="">
+      <div class="info-rows">
+        <div class="info-name"><a id="market-title" target="_blank" rel="noopener"></a></div>
+        <div class="info-row"><span>Market probability:</span><span class="val" id="market-prob">—</span></div>
+        <div class="info-row"><span>Your position:</span><span class="val" id="market-position">—</span></div>
+        <div class="info-row"><span>Est. time to resolution:</span><span class="val" id="market-time">—</span></div>
+      </div>
+    </div>
+    <div class="field-note hidden" id="market-note"></div>
+  </section>
+
+  <hr>
+
+  <!-- Probability estimate & results -->
+  <section>
+    <label class="section-label" for="prob-input">Probability estimate (%)</label>
+    <input class="num-input" id="prob-input" type="number" min="0.1" max="99.9" step="any" inputmode="decimal">
+
+    <div id="results" class="hidden">
+      <div class="result-row"><span><b>Recommended bet</b>:</span><span class="val" id="rec-bet">—</span></div>
+      <div class="result-row" id="rec-return-row"><span>Expected return of this bet on its own:</span><span class="val" id="rec-return">—</span></div>
+      <div class="result-row" id="rec-growth-row"><span>Expected growth in entire portfolio due to this bet:</span><span class="val" id="rec-growth">—</span></div>
+    </div>
+    <div class="field-note hidden" id="calc-note"></div>
+  </section>
+
+  <!-- Bet panel -->
+  <div class="bet-panel">
+    <div class="bet-row">
+      <span class="m">M</span>
+      <input id="bet-amount" type="number" min="1" step="1" inputmode="numeric">
+      <span>on</span>
+      <button class="side-btn yes" id="btn-yes">YES</button>
+      <button class="side-btn no" id="btn-no">NO</button>
+    </div>
+    <div class="result-row"><span>Payout if <span id="payout-side" class="green">YES</span>:</span><span class="val" id="payout-val">M—</span></div>
+    <div class="result-row"><span>New probability:</span><span class="val" id="new-prob">—</span></div>
+
+    <label class="small-label" for="api-key">API key (found <a href="https://manifold.markets/profile" target="_blank" rel="noopener">here</a>)</label>
+    <div class="bet-actions">
+      <input id="api-key" placeholder='e.g. "7373176d-01c5-4318-a21b-8ae7cb24caa7"' autocomplete="off" spellcheck="false">
+      <button id="place-bet" disabled>PLACE BET</button>
+    </div>
+    <div id="bet-status"></div>
+  </div>
+
+  <!-- Advanced options -->
+  <details open>
+    <summary>Advanced options</summary>
+    <div class="inner">
+      <label class="section-label" for="deferral-input">Deferral factor (%)</label>
+      <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://en.wikipedia.org/wiki/Kelly_criterion" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
+      <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
+    </div>
+  </details>
+
+  <footer>
+    A single-file rebuild of <a href="https://github.com/Will-Howard/manifolio" target="_blank" rel="noopener">manifolio</a>.
+    The recommendation maximizes expected log wealth, accounting for the price impact of your bet (CPMM liquidity)
+    and your existing position in this market. Bankroll = balance − loans. It ignores limit orders in the
+    order book and correlations with the rest of your portfolio. Your API key is only sent to the Manifold API.
+  </footer>
+</div>
+
+<script>
+"use strict";
+(() => {
+  const API = "https://api.manifold.markets/v0";
+  const $ = (id) => document.getElementById(id);
+
+  const state = {
+    user: null,       // { id, name, avatarUrl, balance, loans, portfolio }
+    market: null,     // manifold market object (binary cpmm-1)
+    position: { yes: 0, no: 0 },
+    rec: null,        // { amount, outcome }
+  };
+
+  // ---------- formatting ----------
+  const fmtM   = (x) => "M" + Math.round(x).toLocaleString("en-US");
+  const fmtPct = (x) => (100 * x).toFixed(1) + "%";
+  const fmtPctPerYear = (x) => {
+    if (!isFinite(x)) return "—";
+    const pct = 100 * x;
+    const s = Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(1);
+    return s + "% per year";
+  };
+  function humanizeDuration(ms) {
+    const d = ms / 86400000;
+    if (d < 1) return "less than a day";
+    if (d < 1.5) return "a day";
+    if (d < 28) return Math.round(d) + " days";
+    const mo = d / 30.44;
+    if (mo < 1.5) return "a month";
+    if (mo < 11) return Math.round(mo) + " months";
+    const y = d / 365.25;
+    if (y < 1.5) return "a year";
+    return Math.round(y) + " years";
+  }
+
+  // ---------- CPMM math (Manifold's Maniswap, mirrors manifold's calculate-cpmm.ts) ----------
+  function cpmmProbability(pool, p) {
+    return (p * pool.NO) / (p * pool.NO + (1 - p) * pool.YES);
+  }
+  function cpmmShares(pool, p, bet, outcome) {
+    const y = pool.YES, n = pool.NO;
+    const k = Math.pow(y, p) * Math.pow(n, 1 - p);
+    return outcome === "YES"
+      ? y + bet - Math.pow(k * Math.pow(bet + n, p - 1), 1 / p)
+      : n + bet - Math.pow(k * Math.pow(bet + y, -p), 1 / (1 - p));
+  }
+  // shares received and market probability after a bet
+  function getBetInfo(market, bet, outcome) {
+    if (bet <= 0) return { shares: 0, newProb: cpmmProbability(market.pool, market.p) };
+    const shares = cpmmShares(market.pool, market.p, bet, outcome);
+    const newPool = outcome === "YES"
+      ? { YES: market.pool.YES + bet - shares, NO: market.pool.NO + bet }
+      : { YES: market.pool.YES + bet, NO: market.pool.NO + bet - shares };
+    return { shares, newProb: cpmmProbability(newPool, market.p) };
+  }
+
+  // ---------- Kelly optimization ----------
+  function goldenMaximize(f, lo, hi, iters = 100) {
+    const phi = (Math.sqrt(5) - 1) / 2;
+    let a = lo, b = hi;
+    let c = b - phi * (b - a), d = a + phi * (b - a);
+    let fc = f(c), fd = f(d);
+    for (let i = 0; i < iters; i++) {
+      if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
+      else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
+    }
+    const x = (a + b) / 2;
+    return { x, fx: f(x) };
+  }
+
+  // Expected log wealth of betting `amount` on `outcome`, with bankroll B and
+  // existing shares (eYes, eNo) in this market. pYes = deferral-adjusted P(YES).
+  function makeObjective(market, outcome, pYes, B, eYes, eNo) {
+    return (amount) => {
+      const { shares } = getBetInfo(market, amount, outcome);
+      const wYes = B - amount + eYes + (outcome === "YES" ? shares : 0);
+      const wNo  = B - amount + eNo  + (outcome === "NO"  ? shares : 0);
+      if (wYes <= 0 || wNo <= 0) return -Infinity;
+      return pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo);
+    };
+  }
+
+  function computeKelly() {
+    const { user, market, position } = state;
+    const probPct = parseFloat($("prob-input").value);
+    const defPct  = parseFloat($("deferral-input").value);
+    if (!user || !market || !isFinite(probPct)) return null;
+    if (probPct <= 0 || probPct >= 100) return { error: "Probability estimate must be between 0 and 100 (exclusive)." };
+
+    const f = isFinite(defPct) ? Math.min(Math.max(defPct / 100, 0), 1) : 0.5;
+    const pMarket = cpmmProbability(market.pool, market.p);
+    const pUser = probPct / 100;
+    // Deferral factor: treat the "true" probability as f of the way from the
+    // market's estimate to yours (equivalent to fractional Kelly).
+    const pYes = f * pUser + (1 - f) * pMarket;
+
+    const B = user.balance - user.loans;
+    if (B <= 1) return { error: "Balance minus loans is M" + Math.round(B) + " — nothing safe to bet." };
+
+    const outcome = pYes > pMarket ? "YES" : "NO";
+    if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (deferral-adjusted) estimate matches the market — no bet." };
+
+    const maxBet = Math.min(B, user.balance) * (1 - 1e-9);
+    const J = makeObjective(market, outcome, pYes, B, position.yes, position.no);
+    const { x } = goldenMaximize(J, 0, maxBet);
+    const amount = Math.round(x);
+
+    const pWin = outcome === "YES" ? pYes : 1 - pYes;
+    const now = Date.now();
+    const tYears = market.closeTime
+      ? Math.max((market.closeTime - now) / (365.25 * 86400000), 1 / 365.25)
+      : null;
+
+    if (amount < 1) return { error: "No bet recommended at these odds." };
+
+    const { shares } = getBetInfo(market, amount, outcome);
+    const annualReturn = tYears ? Math.pow((pWin * shares) / amount, 1 / tYears) - 1 : null;
+    const annualGrowth = tYears ? Math.exp((J(amount) - J(0)) / tYears) - 1 : null;
+
+    return { amount, outcome, shares, annualReturn, annualGrowth };
+  }
+
+  // ---------- API ----------
+  async function fetchJSON(url, opts) {
+    const res = await fetch(url, opts);
+    let body = null;
+    try { body = await res.json(); } catch (e) { /* non-JSON response */ }
+    if (!res.ok) {
+      const msg = body && (body.message || body.error) ? (body.message || body.error) : res.status + " " + res.statusText;
+      throw new Error(msg);
+    }
+    return body;
+  }
+
+  function parseSlug(text) {
+    text = text.trim();
+    if (!text) return null;
+    try {
+      const url = new URL(text.includes("://") ? text : "https://" + text);
+      if (url.hostname.includes("manifold")) {
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (parts.length >= 2) return parts[1];
+        if (parts.length === 1) return parts[0];
+        return null;
+      }
+    } catch (e) { /* not a URL — treat as a bare slug */ }
+    return text.split(/[?#]/)[0].replace(/^\/+|\/+$/g, "") || null;
+  }
+
+  function setNote(id, text, isError) {
+    const el = $(id);
+    el.textContent = text || "";
+    el.classList.toggle("hidden", !text);
+    el.classList.toggle("error", !!isError);
+  }
+
+  let userSeq = 0;
+  async function loadUser() {
+    const input = $("username-input");
+    const username = input.value.trim();
+    const seq = ++userSeq;
+    state.user = null;
+    $("user-card").classList.add("hidden");
+    input.classList.remove("ok", "bad");
+    setNote("user-note", "");
+    if (!username) { refresh(); return; }
+
+    setNote("user-note", "Loading…");
+    try {
+      const u = await fetchJSON(`${API}/user/${encodeURIComponent(username)}`);
+      if (seq !== userSeq) return;
+      let loans = 0, invested = 0;
+      try {
+        const pf = await fetchJSON(`${API}/get-user-portfolio?userId=${u.id}`);
+        loans = pf.loanTotal || 0;
+        invested = pf.investmentValue || 0;
+      } catch (e) { /* portfolio endpoint failed — fall back to balance only */ }
+      if (seq !== userSeq) return;
+
+      state.user = {
+        id: u.id, name: u.name || u.username, avatarUrl: u.avatarUrl,
+        balance: u.balance, loans,
+        portfolio: u.balance - loans + invested,
+      };
+      $("user-name").textContent = state.user.name;
+      $("user-balance").textContent = fmtM(state.user.balance);
+      $("user-loans").textContent = fmtM(state.user.loans);
+      $("user-portfolio").textContent = fmtM(state.user.portfolio);
+      const av = $("user-avatar");
+      if (state.user.avatarUrl) { av.src = state.user.avatarUrl; av.style.visibility = "visible"; }
+      else { av.removeAttribute("src"); av.style.visibility = "hidden"; }
+      $("user-card").classList.remove("hidden");
+      input.classList.add("ok");
+      setNote("user-note", "");
+    } catch (e) {
+      if (seq !== userSeq) return;
+      input.classList.add("bad");
+      setNote("user-note", "Couldn't load user: " + e.message, true);
+    }
+    loadPosition();
+    refresh();
+  }
+
+  let marketSeq = 0;
+  async function loadMarket() {
+    const input = $("market-input");
+    const slug = parseSlug(input.value);
+    const seq = ++marketSeq;
+    state.market = null;
+    $("market-card").classList.add("hidden");
+    input.classList.remove("ok", "bad");
+    setNote("market-note", "");
+    if (!slug) { refresh(); return; }
+
+    setNote("market-note", "Loading…");
+    try {
+      const m = await fetchJSON(`${API}/slug/${encodeURIComponent(slug)}`);
+      if (seq !== marketSeq) return;
+      if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") {
+        throw new Error("Only binary (YES/NO) markets are supported, this market is " + m.outcomeType + ".");
+      }
+      if (m.isResolved) throw new Error("This market has already resolved.");
+      state.market = m;
+
+      $("market-title").textContent = m.question;
+      $("market-title").href = m.url;
+      $("market-prob").textContent = fmtPct(cpmmProbability(m.pool, m.p));
+      const img = $("market-image");
+      const src = m.coverImageUrl || m.creatorAvatarUrl;
+      if (src) { img.src = src; img.style.visibility = "visible"; }
+      else { img.removeAttribute("src"); img.style.visibility = "hidden"; }
+      const msLeft = m.closeTime ? m.closeTime - Date.now() : null;
+      $("market-time").textContent = msLeft === null ? "—" : (msLeft > 0 ? humanizeDuration(msLeft) : "closed");
+      $("market-card").classList.remove("hidden");
+      input.classList.add("ok");
+      setNote("market-note", msLeft !== null && msLeft <= 0 ? "This market is closed to trading." : "", msLeft !== null && msLeft <= 0);
+    } catch (e) {
+      if (seq !== marketSeq) return;
+      input.classList.add("bad");
+      setNote("market-note", "Couldn't load market: " + e.message, true);
+    }
+    loadPosition();
+    refresh();
+  }
+
+  let positionSeq = 0;
+  async function loadPosition() {
+    const seq = ++positionSeq;
+    state.position = { yes: 0, no: 0 };
+    $("market-position").textContent = "—";
+    if (!state.user || !state.market) return;
+    try {
+      const metrics = await fetchJSON(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`);
+      if (seq !== positionSeq) return;
+      let yes = 0, no = 0;
+      for (const met of metrics || []) {
+        if (met.answerId) continue;
+        yes += (met.totalShares && met.totalShares.YES) || 0;
+        no  += (met.totalShares && met.totalShares.NO)  || 0;
+      }
+      state.position = { yes, no };
+      const posEl = $("market-position");
+      const net = yes - no;
+      if (Math.abs(net) < 1) posEl.textContent = "none";
+      else {
+        const side = net > 0 ? "YES" : "NO";
+        posEl.innerHTML = "";
+        posEl.append(Math.round(Math.abs(net)).toLocaleString("en-US") + " ");
+        const span = document.createElement("span");
+        span.className = net > 0 ? "green" : "red";
+        span.textContent = side;
+        posEl.append(span, " shares");
+      }
+      refresh();
+    } catch (e) { /* position is optional — leave as zero */ }
+  }
+
+  // ---------- rendering ----------
+  function renderRecommendation() {
+    const results = $("results");
+    setNote("calc-note", "");
+    state.rec = null;
+
+    const out = computeKelly();
+    if (!out) { results.classList.add("hidden"); return; }
+    if (out.error) {
+      results.classList.add("hidden");
+      setNote("calc-note", out.error, false);
+      return;
+    }
+
+    state.rec = out;
+    const recEl = $("rec-bet");
+    recEl.innerHTML = "";
+    recEl.append(fmtM(out.amount) + " on ");
+    const span = document.createElement("span");
+    span.className = out.outcome === "YES" ? "green" : "red";
+    span.textContent = out.outcome;
+    recEl.append(span);
+
+    $("rec-return").textContent = out.annualReturn === null ? "—" : fmtPctPerYear(out.annualReturn);
+    $("rec-growth").textContent = out.annualGrowth === null ? "—" : fmtPctPerYear(out.annualGrowth);
+    results.classList.remove("hidden");
+
+    // sync the bet panel to the recommendation
+    $("bet-amount").value = out.amount;
+    panelOutcome = out.outcome;
+  }
+
+  let panelOutcome = "YES";
+  function renderBetPanel() {
+    $("btn-yes").classList.toggle("selected", panelOutcome === "YES");
+    $("btn-no").classList.toggle("selected", panelOutcome === "NO");
+    const sideEl = $("payout-side");
+    sideEl.textContent = panelOutcome;
+    sideEl.className = panelOutcome === "YES" ? "green" : "red";
+
+    const amount = parseFloat($("bet-amount").value);
+    const m = state.market;
+    if (!m || !isFinite(amount) || amount <= 0) {
+      $("payout-val").textContent = "M—";
+      $("new-prob").textContent = "—";
+    } else {
+      const { shares, newProb } = getBetInfo(m, amount, panelOutcome);
+      const prob = cpmmProbability(m.pool, m.p);
+      const deltaPts = 100 * (newProb - prob);
+      $("payout-val").textContent = fmtM(shares);
+      $("new-prob").textContent =
+        fmtPct(newProb) + " (" + (deltaPts >= 0 ? "+" : "") + deltaPts.toFixed(1) + "%)";
+    }
+
+    const key = $("api-key").value.trim();
+    $("place-bet").disabled = !(key && m && isFinite(amount) && amount >= 1);
+  }
+
+  function refresh() {
+    renderRecommendation();
+    renderBetPanel();
+    syncUrl();
+  }
+
+  // ---------- place bet ----------
+  async function placeBet() {
+    const btn = $("place-bet");
+    const status = $("bet-status");
+    const amount = Math.round(parseFloat($("bet-amount").value));
+    const key = $("api-key").value.trim();
+    if (!state.market || !isFinite(amount) || amount < 1 || !key) return;
+
+    btn.disabled = true;
+    status.className = "";
+    status.textContent = "Placing bet…";
+    try {
+      const bet = await fetchJSON(`${API}/bet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Key " + key },
+        body: JSON.stringify({ amount, contractId: state.market.id, outcome: panelOutcome }),
+      });
+      status.className = "success";
+      status.textContent = "Placed " + fmtM(amount) + " on " + panelOutcome +
+        (bet && bet.shares ? " — received " + fmtM(bet.shares) + " shares." : ".");
+      // refresh user, market and position so the next recommendation is up to date
+      await Promise.all([loadUser(), loadMarket()]);
+    } catch (e) {
+      status.className = "error";
+      status.textContent = "Bet failed: " + e.message;
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- URL state ----------
+  function syncUrl() {
+    const params = new URLSearchParams();
+    const u = $("username-input").value.trim();
+    const m = $("market-input").value.trim();
+    const p = $("prob-input").value;
+    const d = $("deferral-input").value;
+    if (u) params.set("user", u);
+    if (m) params.set("market", m);
+    if (p) params.set("prob", p);
+    if (d && d !== "50") params.set("deferral", d);
+    const qs = params.toString();
+    history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+  }
+
+  function initFromUrl() {
+    const q = new URLSearchParams(location.search);
+    const user = q.get("user") || q.get("usernameInput");
+    const market = q.get("market") || q.get("marketInput");
+    if (user) $("username-input").value = user;
+    if (market) $("market-input").value = market;
+    if (q.get("prob")) $("prob-input").value = q.get("prob");
+    if (q.get("deferral")) $("deferral-input").value = q.get("deferral");
+  }
+
+  // ---------- wiring ----------
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  $("username-input").addEventListener("input", debounce(loadUser, 500));
+  $("market-input").addEventListener("input", debounce(loadMarket, 500));
+  $("username-clear").addEventListener("click", () => { $("username-input").value = ""; loadUser(); });
+  $("market-clear").addEventListener("click", () => { $("market-input").value = ""; loadMarket(); });
+  $("prob-input").addEventListener("input", debounce(refresh, 300));
+  $("deferral-input").addEventListener("input", debounce(refresh, 300));
+  $("bet-amount").addEventListener("input", renderBetPanel);
+  $("api-key").addEventListener("input", renderBetPanel);
+  $("btn-yes").addEventListener("click", () => { panelOutcome = "YES"; renderBetPanel(); });
+  $("btn-no").addEventListener("click", () => { panelOutcome = "NO"; renderBetPanel(); });
+  $("place-bet").addEventListener("click", placeBet);
+
+  initFromUrl();
+  if ($("username-input").value) loadUser();
+  if ($("market-input").value) loadMarket();
+  refresh();
+})();
+</script>
+</body>
+</html>
