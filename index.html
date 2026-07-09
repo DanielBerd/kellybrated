@@ -180,7 +180,7 @@
     <label class="section-label" for="prob-input">Probability estimate (%)</label>
     <input class="num-input" id="prob-input" type="number" min="0.1" max="99.9" step="any" inputmode="decimal">
 
-    <label class="section-label mt" for="deferral-input">Deferral factor (%)</label>
+    <label class="section-label mt" for="deferral-input">Kelly factor (0–100%)</label>
     <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
     <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
     <label class="check-label"><input type="checkbox" id="ignore-loans"> Ignore loans — use the full balance as the bankroll</label>
@@ -313,7 +313,7 @@
     const f = isFinite(defPct) ? Math.min(Math.max(defPct / 100, 0), 1) : 0.5;
     const pMarket = cpmmProbability(market.pool, market.p);
     const pUser = probPct / 100;
-    // Deferral factor: treat the "true" probability as f of the way from the
+    // Kelly factor: treat the "true" probability as f of the way from the
     // market's estimate to yours (equivalent to fractional Kelly).
     const pYes = f * pUser + (1 - f) * pMarket;
 
@@ -322,7 +322,7 @@
     if (B <= 1) return { error: (ignoreLoans ? "Balance is M" : "Balance minus loans is M") + Math.round(B) + " — nothing safe to bet." };
 
     const outcome = pYes > pMarket ? "YES" : "NO";
-    if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (deferral-adjusted) estimate matches the market — no bet." };
+    if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (Kelly-adjusted) estimate matches the market — no bet." };
 
     const maxBet = Math.min(B, user.balance) * (1 - 1e-9);
     const J = makeObjective(market, outcome, pYes, B, position.yes, position.no);

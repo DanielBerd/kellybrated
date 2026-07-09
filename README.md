@@ -13,7 +13,7 @@ Enter your Manifold username, a market URL, and your probability estimate. The c
 - **Market liquidity** — your bet moves the price (Manifold's Maniswap CPMM math), so recommendations shrink in thin markets.
 - **Your existing position** in the market.
 - **Loans** — bankroll is balance minus loans by default; both pages have an "ignore loans" toggle to use the full balance instead.
-- **Deferral factor** (fractional Kelly): the calculation uses a probability that is f of the way from the market's estimate to yours. 50% (the default) is equivalent to half-Kelly.
+- **Kelly factor** ([fractional Kelly](https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly)): the calculation uses a probability that is f of the way from the market's estimate to yours. 50% (the default) is equivalent to half-Kelly.
 
 It ignores limit orders in the order book and correlations with the rest of your portfolio (unlike the full [manifolio](https://github.com/Will-Howard/manifolio), which this is a simplified rebuild of).
 
@@ -44,8 +44,4 @@ Firefox treats host permissions as opt-in: to let the extension auto-detect your
 
 ## Development
 
-Everything is in `index.html`. To preview locally on Windows without node/python:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File serve.ps1   # serves on http://localhost:8123
-```
+Everything is in `index.html` and `mini.html` — no build step. To preview locally, serve the folder with any static file server (e.g. `python3 -m http.server` or `npx serve`) or just open the files directly in a browser.
