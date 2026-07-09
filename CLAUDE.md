@@ -7,5 +7,5 @@
   end every commit message with:
 
   ```
-  Co-authored-by: DanielBerd <82143313+DanielBerd@users.noreply.github.com>
+  Co-authored-by: Daniel <daniel.ber@outlook.com>
   ```
