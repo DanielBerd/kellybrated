@@ -152,7 +152,7 @@ $("go").onclick = async () => {
 // the username remembered from the last successful calculation
 try {
   const q = new URLSearchParams(location.search);
-  $("user").value = q.get("user") || localStorage.getItem(LAST_USER_KEY) || "";
+  $("user").value = q.get("user") || q.get("username") || localStorage.getItem(LAST_USER_KEY) || "";
   if (q.get("market")) $("market").value = q.get("market");
   if (q.get("prob")) $("prob").value = q.get("prob");
   if (q.get("deferral")) $("deferral").value = q.get("deferral");

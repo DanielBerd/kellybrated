@@ -618,7 +618,7 @@
 
   function initFromUrl() {
     const q = new URLSearchParams(location.search);
-    let user = q.get("user") || q.get("usernameInput");
+    let user = q.get("user") || q.get("username") || q.get("usernameInput");
     const market = q.get("market") || q.get("marketInput");
     if (!user) try { user = localStorage.getItem(LAST_USER_KEY); } catch (e) { /* storage blocked */ }
     if (user) $("username-input").value = user;
