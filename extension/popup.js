@@ -48,8 +48,8 @@ function renderVals() {
   $("kelly-factor-val").textContent = String(Math.round(kellyPct)) + "%";
 }
 function setProb(v, fromSlider) {
-  if (!(isFinite(v) && v > 0 && v < 100)) { renderVals(); return; }
-  probPct = Math.min(Math.max(Math.round(v * 10) / 10, 0.1), 99.9);
+  if (!(isFinite(v) && v >= 0 && v <= 100)) { renderVals(); return; }
+  probPct = Math.min(Math.max(Math.round(v * 10) / 10, 0), 100);
   if (!fromSlider) $("kelly-prob").value = probPct;
   renderVals();
 }

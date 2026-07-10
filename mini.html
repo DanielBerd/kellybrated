@@ -26,7 +26,7 @@
 
 <label>Manifold username <input type="text" id="user" autocomplete="off" spellcheck="false"></label>
 <label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
-<label>Your probability estimate (%) <input type="number" id="prob" min="0.1" max="99.9" step="any"></label>
+<label>Your probability estimate (%) <input type="number" id="prob" min="0" max="100" step="any"></label>
 <label><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">Kelly factor</a> (0–100%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
 <label><input type="checkbox" id="noloans"> Ignore loans — bankroll = full balance</label>
 <button id="go">Calculate</button>
@@ -87,7 +87,7 @@ $("go").onclick = async () => {
   try {
     const pu = parseFloat($("prob").value) / 100;
     const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
-    if (!(pu > 0 && pu < 1)) throw new Error("Probability estimate must be between 0 and 100.");
+    if (!(pu >= 0 && pu <= 1)) throw new Error("Probability estimate must be between 0 and 100.");
 
     const u = await j(`${API}/user/${encodeURIComponent($("user").value.trim())}`);
     try { localStorage.setItem(LAST_USER_KEY, u.username); } catch (e) {}

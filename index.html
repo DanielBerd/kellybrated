@@ -178,7 +178,7 @@
   <!-- Probability estimate & results -->
   <section>
     <label class="section-label" for="prob-input">Probability estimate (%)</label>
-    <input class="num-input" id="prob-input" type="number" min="0.1" max="99.9" step="any" inputmode="decimal">
+    <input class="num-input" id="prob-input" type="number" min="0" max="100" step="any" inputmode="decimal">
 
     <label class="section-label mt" for="deferral-input">Kelly factor (0–100%)</label>
     <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
@@ -308,7 +308,7 @@
     const probPct = parseFloat($("prob-input").value);
     const defPct  = parseFloat($("deferral-input").value);
     if (!user || !market || !isFinite(probPct)) return null;
-    if (probPct <= 0 || probPct >= 100) return { error: "Probability estimate must be between 0 and 100 (exclusive)." };
+    if (probPct < 0 || probPct > 100) return { error: "Probability estimate must be between 0 and 100." };
 
     const f = isFinite(defPct) ? Math.min(Math.max(defPct / 100, 0), 1) : 0.5;
     const pMarket = cpmmProbability(market.pool, market.p);

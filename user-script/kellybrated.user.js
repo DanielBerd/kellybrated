@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.2.0
+// @version      1.2.1
 // @description  Shows the Kelly-optimal bet size in a small panel on Manifold binary market pages.
 // @author       Daniel & Claude
 // @match        https://manifold.markets/*
@@ -126,8 +126,8 @@
     if (k) k.textContent = String(Math.round(kellyPct)) + "%";
   }
   function setProb(v, fromSlider) {
-    if (!(isFinite(v) && v > 0 && v < 100)) { renderVals(); return; }
-    probPct = Math.min(Math.max(Math.round(v * 10) / 10, 0.1), 99.9);
+    if (!(isFinite(v) && v >= 0 && v <= 100)) { renderVals(); return; }
+    probPct = Math.min(Math.max(Math.round(v * 10) / 10, 0), 100);
     if (!fromSlider && $("kelly-prob")) $("kelly-prob").value = probPct;
     renderVals();
   }
@@ -172,7 +172,7 @@
       <div id="kelly-body" style="padding:8px 10px;">
         <label for="kelly-prob" style="display:block;">Your probability estimate —
           <span id="kelly-prob-val" title="Click to type a value" style="${valCss}">—%</span></label>
-        <input id="kelly-prob" type="range" min="1" max="99" step="0.5"
+        <input id="kelly-prob" type="range" min="0" max="100" step="0.5"
                style="width:100%;margin:4px 0 8px;accent-color:#2a9d8f;display:block;">
         <label for="kelly-factor" style="display:block;"><a
              href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly"
