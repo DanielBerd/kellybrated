@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kelly bet size for Manifold
 // @namespace    https://github.com/DanielBerd/kelly-manifold
-// @version      1.0.0
+// @version      1.1.0
 // @description  Shows the Kelly-optimal bet size in a small panel on Manifold binary market pages.
 // @author       Daniel & Claude
 // @match        https://manifold.markets/*
@@ -71,6 +71,17 @@
     } catch (e) { /* storage blocked */ }
     return null;
   }
+  let username = null;
+  function resolveUsername() {
+    const detected = detectUsername();
+    if (detected) {
+      username = detected;
+      try { localStorage.setItem(LAST_USER_KEY, detected); } catch (e) {}
+      return true;
+    }
+    if (!username) try { username = localStorage.getItem(LAST_USER_KEY) || null; } catch (e) {}
+    return !!username;
+  }
 
   // ---------- market-page URL parsing (same rules as the extension) ----------
   const NON_MARKET_ROOTS = new Set([
@@ -84,24 +95,48 @@
     return parts[1];
   }
 
+  // ---------- theming (follows Manifold's dark-mode class live) ----------
+  const darkMode = () => document.documentElement.classList.contains("dark");
+  function applyTheme() {
+    const box = $("kelly-panel");
+    if (!box) return;
+    const dark = darkMode();
+    box.style.background = dark ? "#1f2937" : "#fff";
+    box.style.color = dark ? "#e5e7eb" : "#111";
+    box.style.borderColor = dark ? "#4b5563" : "#bbb";
+    for (const el of box.querySelectorAll(".kelly-input")) {
+      el.style.background = dark ? "#111827" : "#fff";
+      el.style.borderColor = dark ? "#4b5563" : "#999";
+      el.style.color = "inherit";
+    }
+    const out = $("kelly-out");
+    if (out) out.style.borderTopColor = dark ? "#4b5563" : "#ccc";
+  }
+  new MutationObserver(applyTheme)
+    .observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
   // ---------- panel ----------
-  function darkMode() { return document.documentElement.classList.contains("dark"); }
+  let probPct = null; // user's probability estimate in %, one decimal
+
+  function renderProbVal() {
+    const span = $("kelly-prob-val");
+    if (span) span.textContent = (probPct != null ? String(+probPct.toFixed(1)) : "—") + "%";
+  }
+  function setProb(v, fromSlider) {
+    probPct = Math.min(Math.max(Math.round(v * 10) / 10, 0.1), 99.9);
+    const slider = $("kelly-prob");
+    if (slider && !fromSlider) slider.value = probPct;
+    renderProbVal();
+  }
 
   function buildPanel() {
-    const dark = darkMode();
     const box = document.createElement("div");
     box.id = "kelly-panel";
-    box.style.cssText = [
-      "position:fixed", "right:16px", "bottom:16px", "z-index:99999", "width:280px",
-      "font:13px/1.4 system-ui,sans-serif",
-      "background:" + (dark ? "#1f2937" : "#fff"),
-      "color:" + (dark ? "#e5e7eb" : "#111"),
-      "border:1px solid " + (dark ? "#4b5563" : "#bbb"),
-      "border-radius:10px", "box-shadow:0 4px 16px rgba(0,0,0,.25)", "overflow:hidden",
-    ].join(";");
-    const inputCss = "width:100%;box-sizing:border-box;margin:2px 0 6px;padding:4px 6px;font:inherit;" +
-      "border:1px solid " + (dark ? "#4b5563" : "#999") + ";border-radius:5px;" +
-      "background:" + (dark ? "#111827" : "#fff") + ";color:inherit;";
+    box.style.cssText =
+      "position:fixed;right:16px;bottom:16px;z-index:99999;width:280px;" +
+      "font:13px/1.4 system-ui,sans-serif;border:1px solid;border-radius:10px;" +
+      "box-shadow:0 4px 16px rgba(0,0,0,.25);overflow:hidden;";
+    const inputCss = "box-sizing:border-box;font:inherit;border:1px solid;border-radius:5px;";
     box.innerHTML = `
       <div id="kelly-head" style="display:flex;align-items:center;gap:6px;padding:6px 10px;cursor:pointer;
            background:#2a9d8f;color:#fff;font-weight:bold;">
@@ -109,19 +144,21 @@
         <span id="kelly-toggle">–</span>
       </div>
       <div id="kelly-body" style="padding:8px 10px;">
-        <label>Username
-          <input id="kelly-user" type="text" spellcheck="false" style="${inputCss}"></label>
-        <label>Your probability estimate (%)
-          <input id="kelly-prob" type="number" min="0.1" max="99.9" step="any" style="${inputCss}"></label>
-        <label><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly"
+        <label for="kelly-prob" style="display:block;">Your probability estimate —
+          <span id="kelly-prob-val" title="Click to type a value"
+                style="cursor:pointer;font-weight:bold;text-decoration:underline dotted;">—%</span></label>
+        <input id="kelly-prob" type="range" min="1" max="99" step="0.5"
+               style="width:100%;margin:4px 0 8px;accent-color:#2a9d8f;display:block;">
+        <label style="display:block;"><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly"
              target="_blank" rel="noopener" style="color:#2a9d8f;">Kelly factor</a> (0–100%) — 50 = half Kelly
-          <input id="kelly-factor" type="number" min="0" max="100" step="any" style="${inputCss}"></label>
+          <input id="kelly-factor" type="number" min="0" max="100" step="any" class="kelly-input"
+                 style="${inputCss}width:100%;margin:2px 0 6px;padding:4px 6px;"></label>
         <label style="display:block;margin-bottom:6px;">
           <input id="kelly-noloans" type="checkbox"> Ignore loans</label>
-        <div id="kelly-out" style="white-space:pre-line;border-top:1px solid ${dark ? "#4b5563" : "#ccc"};
-             padding-top:6px;min-height:1em;"></div>
+        <div id="kelly-out" style="white-space:pre-line;border-top:1px solid;padding-top:6px;min-height:1em;"></div>
       </div>`;
     document.body.appendChild(box);
+    applyTheme();
 
     const body = $("kelly-body"), toggle = $("kelly-toggle");
     const setCollapsed = (c) => {
@@ -132,20 +169,37 @@
     $("kelly-head").addEventListener("click", () => setCollapsed(body.style.display !== "none"));
     try { if (localStorage.getItem(COLLAPSED_KEY) === "1") setCollapsed(true); } catch (e) {}
 
-    $("kelly-user").value = detectUsername() || (() => {
-      try { return localStorage.getItem(LAST_USER_KEY) || ""; } catch (e) { return ""; }
-    })();
     try { $("kelly-factor").value = localStorage.getItem(KELLY_KEY) || "50"; } catch (e) { $("kelly-factor").value = "50"; }
 
     let t;
-    const onInput = (refetch) => () => {
-      clearTimeout(t);
-      t = setTimeout(() => refresh(refetch), 400);
-    };
-    $("kelly-user").addEventListener("input", onInput(true));
-    $("kelly-prob").addEventListener("input", onInput(false));
-    $("kelly-factor").addEventListener("input", onInput(false));
-    $("kelly-noloans").addEventListener("change", onInput(false));
+    const schedule = (refetch, ms) => { clearTimeout(t); t = setTimeout(() => refresh(refetch), ms); };
+    $("kelly-prob").addEventListener("input", () => {
+      setProb(parseFloat($("kelly-prob").value), true);
+      schedule(false, 250);
+    });
+    $("kelly-factor").addEventListener("input", () => schedule(false, 400));
+    $("kelly-noloans").addEventListener("change", () => schedule(false, 100));
+
+    // click the number to type an exact value
+    $("kelly-prob-val").addEventListener("click", () => {
+      const span = $("kelly-prob-val");
+      if (span.querySelector("input")) return;
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.min = "0.1"; inp.max = "99.9"; inp.step = "any";
+      inp.className = "kelly-input";
+      inp.style.cssText = "width:64px;font:inherit;padding:0 4px;border:1px solid;border-radius:4px;";
+      inp.value = probPct != null ? String(+probPct.toFixed(1)) : "";
+      span.textContent = "";
+      span.appendChild(inp);
+      applyTheme();
+      inp.focus(); inp.select();
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") inp.blur(); });
+      inp.addEventListener("blur", () => {
+        const v = parseFloat(inp.value);
+        if (isFinite(v) && v > 0 && v < 100) { setProb(v); schedule(false, 0); }
+        else renderProbVal();
+      }, { once: true });
+    });
     return box;
   }
 
@@ -158,11 +212,8 @@
   const state = { market: null, user: null, loans: 0, eYes: 0, eNo: 0, fetchedFor: "" };
 
   async function loadUserData() {
-    const username = $("kelly-user").value.trim();
     state.user = null; state.loans = 0; state.eYes = 0; state.eNo = 0;
-    if (!username || !state.market) return;
     state.user = await j(`${API}/user/${encodeURIComponent(username)}`);
-    try { localStorage.setItem(LAST_USER_KEY, state.user.username); } catch (e) {}
     try { state.loans = (await j(`${API}/get-user-portfolio?userId=${state.user.id}`)).loanTotal || 0; } catch (e) {}
     try {
       for (const met of await j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`)) {
@@ -172,14 +223,20 @@
     state.fetchedFor = username + "|" + state.market.id;
   }
 
+  let detectAttempts = 0;
   async function refresh(refetch) {
     const out = $("kelly-out");
     if (!out || !state.market) return;
     try {
-      const username = $("kelly-user").value.trim();
-      if (!username) { out.textContent = "Enter your Manifold username."; return; }
-      const pu = parseFloat($("kelly-prob").value) / 100;
-      if (!(pu > 0 && pu < 1)) { out.textContent = "Enter your probability estimate."; return; }
+      if (!resolveUsername()) {
+        out.textContent = "Waiting to detect your Manifold login…";
+        // auth state loads asynchronously; keep looking for a while
+        if (++detectAttempts < 8) setTimeout(() => refresh(true), 2500);
+        else out.textContent = "Couldn't detect your Manifold login — are you signed in?";
+        return;
+      }
+      if (probPct == null) { out.textContent = "Set your probability estimate."; return; }
+      const pu = probPct / 100;
       out.textContent = "…";
       if (refetch || state.fetchedFor !== username + "|" + state.market.id) await loadUserData();
 
@@ -188,7 +245,7 @@
       try { localStorage.setItem(KELLY_KEY, $("kelly-factor").value); } catch (e) {}
       const loans = $("kelly-noloans").checked ? 0 : state.loans;
       const B = state.user.balance - loans;
-      if (B <= 1) { out.textContent = `Bankroll is M${r(B)} — nothing to bet.`; return; }
+      if (B <= 1) { out.textContent = `@${username} — bankroll M${r(B)}: nothing to bet.`; return; }
 
       const pm = cpmmProb(m.pool, m.p);
       const pYes = f * pu + (1 - f) * pm;
@@ -201,15 +258,15 @@
       };
       const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
 
+      const headLine = `@${username} — bankroll M${r(B)}, Kelly-adjusted estimate ${pct(pYes)}`;
       if (Math.abs(pYes - pm) < 1e-9 || M < 1) {
-        out.textContent = `Bankroll M${r(B)} — Kelly-adjusted estimate ${pct(pYes)}\n` +
-          "Recommended bet: M0 — too close to the market price.";
+        out.textContent = headLine + "\nRecommended bet: M0 — too close to the market price.";
         return;
       }
       const { shares, newProb } = betInfo(m, M, side);
       const pWin = side === "YES" ? pYes : 1 - pYes;
       out.textContent = [
-        `Bankroll M${r(B)} — Kelly-adjusted estimate ${pct(pYes)}`,
+        headLine,
         `Recommended bet: M${r(M)} on ${side}`,
         `Payout if ${side}: M${r(shares)} (profit M${r(shares - M)})`,
         `New market probability: ${pct(newProb)}`,
@@ -234,7 +291,9 @@
     if (slug !== currentSlug) return; // navigated away while fetching
     if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1" || m.isResolved) return;
     state.market = m;
+    detectAttempts = 0;
     buildPanel();
+    setProb(100 * cpmmProb(m.pool, m.p)); // start the slider at the market's probability
     refresh(true);
   }
 
