@@ -42,6 +42,18 @@ For a permanent install, Firefox requires the extension to be signed: zip the co
 
 Firefox treats host permissions as opt-in: to let the extension auto-detect your username, open the extension's **Permissions** tab in `about:addons` and enable access for manifold.markets. Without it the button still works — it prefills the market from the current tab and relies on the calculator's own remembered username.
 
+## Userscript (Greasemonkey / Tampermonkey / Violentmonkey)
+
+`user-script/kelly-manifold.user.js` puts the calculator directly on Manifold itself: whenever you browse to a binary market, a small collapsible "Kelly bet size" panel appears in the bottom-right corner with the same math as the calculator pages — username auto-detected from your signed-in session, bankroll from balance minus loans, existing positions accounted for. It follows Manifold's client-side navigation, so it appears and disappears as you move between markets without page reloads, and skips non-binary and resolved markets.
+
+To install: with a userscript manager installed, open
+
+```
+https://raw.githubusercontent.com/DanielBerd/kelly-manifold/main/user-script/kelly-manifold.user.js
+```
+
+and the manager will offer to install it (updates are picked up from the same URL). The panel remembers your Kelly factor and collapsed/expanded state between visits.
+
 ## Development
 
 Everything is in `index.html` and `mini.html` — no build step. To preview locally, serve the folder with any static file server (e.g. `python3 -m http.server` or `npx serve`) or just open the files directly in a browser.
