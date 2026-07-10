@@ -3,23 +3,55 @@
 <head>
 <meta charset="utf-8">
 <style>
-  html, body { margin: 0; padding: 0; background: #fff; }
-  body { width: 430px; }
-  #bar {
-    display: flex; align-items: center; justify-content: flex-end;
-    padding: 1px 6px; border-bottom: 1px solid #ccc;
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; width: 300px;
+    font: 13px/1.4 system-ui, sans-serif;
+    background: #fff; color: #111;
   }
+  #kelly-head {
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    background: #2a9d8f; color: #fff; font-weight: bold;
+  }
+  #kelly-head span { flex: 1; }
   #open-tab {
-    border: none; background: none; cursor: pointer;
-    font: 13px Georgia, serif; color: #17395c; padding: 3px 6px;
+    border: none; background: none; cursor: pointer; color: #fff;
+    font: 12px system-ui, sans-serif; padding: 0 2px; text-decoration: underline;
   }
-  #open-tab:hover { text-decoration: underline; }
-  #frame { display: block; width: 430px; height: 570px; border: none; background: #fff; }
+  #kelly-body { padding: 8px 10px; }
+  label { display: block; }
+  a { color: #2a9d8f; }
+  .val { cursor: pointer; font-weight: bold; text-decoration: underline dotted; }
+  input[type=range] { width: 100%; margin: 4px 0 8px; accent-color: #2a9d8f; display: block; }
+  input.kelly-input {
+    box-sizing: border-box; font: inherit; padding: 0 4px;
+    border: 1px solid #999; border-radius: 4px; background: #fff; color: inherit; width: 64px;
+  }
+  #kelly-noloans-label { margin-bottom: 6px; }
+  #kelly-out { white-space: pre-line; border-top: 1px solid #ccc; padding-top: 6px; min-height: 1em; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1f2937; color: #e5e7eb; }
+    input.kelly-input { background: #111827; border-color: #4b5563; }
+    #kelly-out { border-top-color: #4b5563; }
+  }
 </style>
 </head>
 <body>
-<div id="bar"><button id="open-tab" title="Open the calculator in a full tab">Open in tab ⧉</button></div>
-<iframe id="frame" title="Kelly calculator"></iframe>
+<div id="kelly-head">
+  <span>Kellybrated</span>
+  <button id="open-tab" title="Open the full calculator in a tab">Open in tab ⧉</button>
+</div>
+<div id="kelly-body">
+  <label for="kelly-prob">Your probability estimate —
+    <span id="kelly-prob-val" class="val" title="Click to type a value">—%</span></label>
+  <input id="kelly-prob" type="range" min="1" max="99" step="0.5">
+  <label for="kelly-factor"><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly"
+       target="_blank" rel="noopener">Kelly factor</a> —
+    <span id="kelly-factor-val" class="val" title="Click to type a value">50%</span> (50 = half Kelly)</label>
+  <input id="kelly-factor" type="range" min="0" max="100" step="1">
+  <label id="kelly-noloans-label"><input id="kelly-noloans" type="checkbox"> Ignore loans</label>
+  <div id="kelly-out">…</div>
+</div>
 <script src="calc-url.js"></script>
 <script src="popup.js"></script>
 </body>

@@ -2,7 +2,7 @@
 // prefilled calculator URL.
 "use strict";
 
-const CALCULATOR_URL = "https://danielberd.github.io/kelly-manifold/";
+const CALCULATOR_URL = "https://danielberd.github.io/kellybrated/";
 
 // Two-segment manifold.markets paths that are NOT /{creator}/{marketSlug}
 const NON_MARKET_ROOTS = new Set([
