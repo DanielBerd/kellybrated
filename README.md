@@ -31,6 +31,16 @@ https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellyb
 
 and the manager will offer to install it (updates are picked up from the same URL). The Kelly factor and collapsed/expanded state persist between visits.
 
+### Polymarket userscript
+
+`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your proxy-wallet address (shown on your Polymarket profile) so the panel can look up your existing position, and enter your available USDC by hand — Polymarket has no public balance endpoint. Bet sizing walks the live CLOB order book instead of a CPMM formula, and the recommendation includes the annualized return to the market's close date. Install from
+
+```
+https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js
+```
+
+There's also a standalone page version at [/polymarket-mini.html](https://danielberd.github.io/kellybrated/polymarket-mini.html).
+
 ## Browser extension
 
 `extension/` contains a small Chrome/Firefox extension (one shared codebase, Manifest V3) with the same compact panel as the userscript: click the toolbar button on a binary market page and the popup shows the sliders and recommendation for that market, using the username detected as you browse manifold.markets. An "Open in tab ⧉" button opens the full calculator page (which can also place the bet).
