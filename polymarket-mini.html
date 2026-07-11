@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kellybrated · Polymarket (mini)</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 24px auto; padding: 0 12px; line-height: 1.4; }
+  label { display: block; margin-top: 10px; }
+  input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 5px; font: inherit; }
+  .hint { display: block; font-size: 0.82em; color: #666; margin-top: 2px; }
+  button { margin-top: 14px; padding: 6px 18px; font: inherit; }
+  #out { white-space: pre-line; margin-top: 16px; border-top: 1px solid #999; padding-top: 12px; }
+  .err { color: #b00020; }
+  footer { margin-top: 24px; font-size: 0.85em; color: #666; }
+  body.embedded { margin: 8px auto; font-size: 15px; }
+  body.embedded h3 { margin: 0 0 2px; font-size: 1.05em; }
+  body.embedded label { margin-top: 6px; }
+  body.embedded button { margin-top: 10px; padding: 4px 14px; }
+  body.embedded #out { margin-top: 10px; padding-top: 8px; }
+  body.embedded footer { display: none; }
+</style>
+</head>
+<body>
+<h3>Kellybrated · Polymarket (mini)</h3>
+
+<label>Your wallet address
+  <input type="text" id="wallet" autocomplete="off" spellcheck="false" placeholder="0x...">
+  <span class="hint">The proxy wallet address shown on your Polymarket profile page.</span>
+</label>
+<label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
+<label>Your probability estimate (%) <input type="number" id="prob" min="0" max="100" step="any"></label>
+<label><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">Kelly factor</a> (0–100%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
+<label>Your available USDC (cash balance)
+  <input type="number" id="balance" min="0" step="any">
+  <span class="hint">Polymarket doesn't expose wallet cash balance over a public API — enter it manually.</span>
+</label>
+<label><input type="checkbox" id="noposition"> Ignore my existing position in this market</label>
+<button id="go">Calculate</button>
+
+<div id="out"></div>
+
+<footer><a href="mini.html">Manifold version</a> · <a href="https://github.com/DanielBerd/kellybrated">source</a></footer>
+
+<script>
+"use strict";
+const GAMMA = "https://gamma-api.polymarket.com";
+const CLOB = "https://clob.polymarket.com";
+const DATA = "https://data-api.polymarket.com";
+const LAST_WALLET_KEY = "kellybrated:lastWallet";
+const $ = id => document.getElementById(id);
+const usd = x => "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = x => (100 * x).toFixed(1) + "%";
+
+async function j(url) {
+  const res = await fetch(url);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
+  return body;
+}
+
+// arrays sometimes come back JSON-encoded as strings from the Gamma API
+function arr(v) {
+  if (Array.isArray(v)) return v;
+  try { return JSON.parse(v); } catch (e) { return []; }
+}
+
+// "https://polymarket.com/event/some-slug?x#y" -> "some-slug"; bare slugs pass through
+function slug(text) {
+  const parts = text.trim().split(/[?#]/)[0].split("/").filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
+// walk a token's ask book to price a market buy of `budget` USDC worth of shares
+function walkAsks(asks, budget) {
+  const levels = asks
+    .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
+    .filter(l => l.price > 0 && l.size > 0)
+    .sort((a, b) => a.price - b.price);
+  let remaining = budget, shares = 0, lastPrice = levels[0] ? levels[0].price : null;
+  for (const lvl of levels) {
+    if (remaining <= 0) break;
+    const levelCost = lvl.price * lvl.size;
+    if (levelCost <= remaining) { shares += lvl.size; remaining -= levelCost; }
+    else { shares += remaining / lvl.price; remaining = 0; }
+    lastPrice = lvl.price;
+  }
+  return { shares, notional: levels.reduce((s, l) => s + l.price * l.size, 0), newProb: lastPrice };
+}
+
+function maximize(f, lo, hi, iters = 100) {
+  const phi = (Math.sqrt(5) - 1) / 2;
+  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
+  for (let i = 0; i < iters; i++) {
+    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
+    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
+  }
+  return (a + b) / 2;
+}
+
+$("go").onclick = async () => {
+  const out = $("out");
+  out.className = "";
+  out.textContent = "Loading…";
+  try {
+    const wallet = $("wallet").value.trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) throw new Error("Enter a valid wallet address (0x… , 40 hex characters).");
+    const pu = parseFloat($("prob").value) / 100;
+    const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
+    if (!(pu >= 0 && pu <= 1)) throw new Error("Probability estimate must be between 0 and 100.");
+    const B = parseFloat($("balance").value);
+    if (!(B > 1)) throw new Error("Enter your available USDC balance.");
+
+    try { localStorage.setItem(LAST_WALLET_KEY, wallet); } catch (e) {}
+
+    const found = await j(`${GAMMA}/markets?slug=${encodeURIComponent(slug($("market").value))}`);
+    const m = Array.isArray(found) ? found[0] : found;
+    if (!m) throw new Error("Market not found.");
+    const outcomes = arr(m.outcomes).map(o => String(o).toLowerCase());
+    const yesIdx = outcomes.indexOf("yes"), noIdx = outcomes.indexOf("no");
+    if (yesIdx === -1 || noIdx === -1) throw new Error("Only binary (Yes/No) markets are supported.");
+    if (m.closed) throw new Error("This market has already closed.");
+    const prices = arr(m.outcomePrices).map(parseFloat);
+    const tokenIds = arr(m.clobTokenIds);
+    const pm = prices[yesIdx];
+
+    const ignorePosition = $("noposition").checked;
+    let eYes = 0, eNo = 0;
+    if (!ignorePosition) try {
+      for (const p of await j(`${DATA}/positions?user=${wallet}&market=${m.conditionId}`)) {
+        const o = String(p.outcome || "").toLowerCase();
+        if (o === "yes") eYes += parseFloat(p.size) || 0;
+        else if (o === "no") eNo += parseFloat(p.size) || 0;
+      }
+    } catch (e) {}
+
+    const pYes = f * pu + (1 - f) * pm;
+    const side = pYes > pm ? "YES" : "NO";
+    const book = await j(`${CLOB}/book?token_id=${tokenIds[side === "YES" ? yesIdx : noIdx]}`);
+    const asks = book.asks || [];
+    if (!asks.length) throw new Error(`No sell orders available for ${side} right now — can't size a bet.`);
+    const { notional } = walkAsks(asks, Infinity);
+
+    const J = M => {
+      const { shares } = walkAsks(asks, M);
+      const wYes = B - M + eYes + (side === "YES" ? shares : 0);
+      const wNo  = B - M + eNo  + (side === "NO"  ? shares : 0);
+      return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
+    };
+    const M = maximize(J, 0, Math.min(B, notional) * (1 - 1e-9));
+
+    const lines = [
+      `Bankroll: ${usd(B)}`,
+      `Market: ${pct(pm)} — ${m.question}`,
+    ];
+    if (eYes || eNo) lines.push(`Your position: ${(eYes - eNo).toFixed(2)} net ${eYes > eNo ? "YES" : "NO"} shares`);
+    lines.push(`Kelly-adjusted estimate: ${pct(pYes)} YES`, "");
+
+    if (Math.abs(pYes - pm) < 1e-9 || M < 1) {
+      lines.push("Recommended bet: $0 — your Kelly-adjusted estimate is too close to the market price.");
+    } else {
+      const { shares, newProb } = walkAsks(asks, M);
+      const pWin = side === "YES" ? pYes : 1 - pYes;
+      lines.push(
+        `Recommended bet: ${usd(M)} on ${side}`,
+        `Shares bought: ${shares.toFixed(2)} (payout ${usd(shares)}, profit ${usd(shares - M)})`,
+        `Fill price: up to ${pct(newProb)} (approx., from current order book depth)`,
+        `Expected profit: ${usd(pWin * shares - M)}`
+      );
+    }
+    out.textContent = lines.join("\n");
+  } catch (e) {
+    out.className = "err";
+    out.textContent = "Error: " + e.message;
+  }
+};
+
+try {
+  const q = new URLSearchParams(location.search);
+  $("wallet").value = q.get("wallet") || localStorage.getItem(LAST_WALLET_KEY) || "";
+  if (q.get("market")) $("market").value = q.get("market");
+  if (q.get("prob")) $("prob").value = q.get("prob");
+  if (q.get("deferral")) $("deferral").value = q.get("deferral");
+} catch (e) {}
+if (window.self !== window.top) document.body.classList.add("embedded");
+</script>
+</body>
+</html>
