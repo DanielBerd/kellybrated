@@ -33,7 +33,7 @@ and the manager will offer to install it (updates are picked up from the same UR
 
 ### Polymarket userscript
 
-`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your proxy-wallet address (shown on your Polymarket profile) so the panel can look up your existing position, and enter your available USDC by hand — Polymarket has no public balance endpoint. Bet sizing walks the live CLOB order book instead of a CPMM formula, and the recommendation includes the annualized return to the market's close date. Install from
+`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your proxy-wallet address (shown on your Polymarket profile) so the panel can look up your existing position. Your available USDC is read from the "Cash" figure in the signed-in page header (typing a value overrides it — Polymarket has no public balance endpoint to query instead). Bet sizing walks the live CLOB order book instead of a CPMM formula, and the recommendation includes the annualized return to the market's close date. Install from
 
 ```
 https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js

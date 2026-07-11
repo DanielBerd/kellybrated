@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated for Polymarket
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.0.0
+// @version      1.1.0
 // @description  Shows the Kelly-optimal bet size in a small panel on Polymarket binary market pages.
 // @author       Daniel & Claude
 // @match        https://polymarket.com/*
@@ -168,6 +168,29 @@
 
   const validWallet = (w) => /^0x[a-fA-F0-9]{40}$/.test(w);
 
+  // ---------- cash auto-detection from the page header ----------
+  // The signed-in header shows "Cash $X.XX" inside a link to /portfolio. Match
+  // on that structure and label, not on styling classes, which change often.
+  function detectCash() {
+    for (const a of document.querySelectorAll('a[href="/portfolio"]')) {
+      const t = a.textContent || "";
+      if (!/\bCash\b/.test(t)) continue;
+      const m = t.match(/\$\s*([\d,]+(?:\.\d+)?)/);
+      if (m) return parseFloat(m[1].replace(/,/g, ""));
+    }
+    return null;
+  }
+  let balanceManual = false; // a hand-typed balance wins over auto-detection
+  function syncCash() {
+    const inp = $("kelly-balance");
+    if (!inp || balanceManual || document.activeElement === inp) return;
+    const cash = detectCash();
+    if (cash == null || parseFloat(inp.value) === cash) return;
+    inp.value = String(cash);
+    try { localStorage.setItem(BALANCE_KEY, inp.value); } catch (e) {}
+    refresh(false);
+  }
+
   function buildPanel() {
     const box = document.createElement("div");
     box.id = "kelly-panel";
@@ -188,7 +211,7 @@
           <span title="The proxy wallet address shown on your Polymarket profile page — used to look up your position in this market." style="cursor:help;">ⓘ</span></label>
         <input id="kelly-wallet" type="text" class="kelly-input" placeholder="0x…" spellcheck="false" style="${inpCss}">
         <label for="kelly-balance" style="display:block;">Available USDC
-          <span title="Polymarket doesn't expose your cash balance over a public API — enter it manually." style="cursor:help;">ⓘ</span></label>
+          <span title="Auto-detected from the Cash figure in the page header when you're signed in; type a value to override." style="cursor:help;">ⓘ</span></label>
         <input id="kelly-balance" type="number" class="kelly-input" min="0" step="any" style="${inpCss}">
         <label for="kelly-prob" style="display:block;">Your probability estimate —
           <span id="kelly-prob-val" title="Click to type a value" style="${valCss}">—%</span></label>
@@ -230,6 +253,7 @@
       schedule(true, 100); // position depends on the wallet
     });
     $("kelly-balance").addEventListener("input", () => {
+      balanceManual = true; // stop auto-detection from fighting the user
       try { localStorage.setItem(BALANCE_KEY, $("kelly-balance").value); } catch (e) {}
       schedule(false, 250);
     });
@@ -365,5 +389,7 @@
   }
 
   onNavigate();
-  setInterval(onNavigate, 500); // Polymarket is a SPA; poll for client-side navigation
+  // Polymarket is a SPA: poll for client-side navigation, and keep the balance
+  // in sync with the header's Cash figure (it updates after bets/deposits).
+  setInterval(() => { onNavigate(); syncCash(); }, 500);
 })();
