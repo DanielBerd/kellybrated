@@ -167,6 +167,15 @@ $("go").onclick = async () => {
         `Fill price: up to ${pct(newProb)} (approx., from current order book depth)`,
         `Expected profit: ${usd(pWin * shares - M)}`
       );
+      // Annualized return on the money at risk, assuming payout at market close.
+      // Markets often resolve earlier than endDate, so this is a lower bound.
+      const daysLeft = (Date.parse(m.endDate) - Date.now()) / 86400000;
+      if (isFinite(daysLeft) && daysLeft > 0) {
+        const ret = (pWin * shares - M) / M;                    // expected return over the holding period
+        const ann = Math.pow(1 + ret, 365.25 / daysLeft) - 1;   // compounded to a year
+        const annText = ann > 100 ? ">10,000%" : (100 * ann).toLocaleString("en-US", { maximumFractionDigits: 1 }) + "%";
+        lines.push(`Annualized return: ${annText} (${daysLeft < 1 ? "<1 day" : Math.round(daysLeft) + " days"} until close)`);
+      }
     }
     out.textContent = lines.join("\n");
   } catch (e) {
