@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Kellybrated",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "One click shows the Kelly-optimal bet size for the Manifold market you're viewing.",
   "homepage_url": "https://github.com/DanielBerd/kellybrated",
   "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://manifold.markets/*"],
+  "host_permissions": ["https://manifold.markets/*", "https://api.manifold.markets/*"],
   "background": {
     "service_worker": "background.js",
     "scripts": ["calc-url.js", "background.js"]

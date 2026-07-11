@@ -9,7 +9,11 @@ if (typeof importScripts === "function") importScripts("calc-url.js");
 const api = typeof browser !== "undefined" ? browser : chrome;
 
 api.action.onClicked.addListener(async (tab) => {
-  let username = null;
-  try { username = (await api.storage.local.get("username")).username || null; } catch (e) { /* open unprefilled */ }
-  await api.tabs.create({ url: buildCalculatorUrl(tab && tab.url, username) });
+  let username = null, kellyFactor;
+  try {
+    const stored = await api.storage.local.get(["username", "kellyFactor"]);
+    username = stored.username || null;
+    kellyFactor = stored.kellyFactor;
+  } catch (e) { /* open unprefilled */ }
+  await api.tabs.create({ url: buildCalculatorUrl(tab && tab.url, username, kellyFactor) });
 });

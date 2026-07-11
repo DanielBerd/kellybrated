@@ -80,12 +80,14 @@ const state = { market: null, username: null, user: null, loans: 0, eYes: 0, eNo
 
 async function loadUserData() {
   state.user = await j(`${API}/user/${encodeURIComponent(state.username)}`);
-  try { state.loans = (await j(`${API}/get-user-portfolio?userId=${state.user.id}`)).loanTotal || 0; } catch (e) {}
-  try {
-    for (const met of await j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`)) {
-      if (!met.answerId) { state.eYes += met.totalShares?.YES || 0; state.eNo += met.totalShares?.NO || 0; }
-    }
-  } catch (e) {}
+  const [portfolio, positions] = await Promise.all([
+    j(`${API}/get-user-portfolio?userId=${state.user.id}`).catch(() => null),
+    j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`).catch(() => null),
+  ]);
+  state.loans = (portfolio && portfolio.loanTotal) || 0;
+  for (const met of positions || []) {
+    if (!met.answerId) { state.eYes += met.totalShares?.YES || 0; state.eNo += met.totalShares?.NO || 0; }
+  }
   state.loaded = true;
 }
 
@@ -155,33 +157,45 @@ async function currentTabUrl() {
 
   let stored = {};
   try { stored = await api.storage.local.get(["username", "kellyFactor"]); } catch (e) {}
-  if (isFinite(stored.kellyFactor)) setKelly(stored.kellyFactor);
+  if (Number.isFinite(stored.kellyFactor)) setKelly(stored.kellyFactor);
 
   // ?tab= lets the panel be tested/debugged outside a real popup
   const tabUrl = new URLSearchParams(location.search).get("tab") || await currentTabUrl();
   const slug = tabUrl ? marketSlugFromUrl(tabUrl) : null;
 
+  // computed at click time so it reflects the validated market and current settings
   $("open-tab").addEventListener("click", async () => {
-    await api.tabs.create({ url: buildCalculatorUrl(tabUrl, state.username || stored.username) });
+    await api.tabs.create({
+      url: buildCalculatorUrl(state.market ? tabUrl : null, state.username || stored.username, kellyPct),
+    });
     window.close();
   });
 
-  if (!slug) { out.textContent = "Open a Manifold market page, then click the icon."; return; }
+  const notAMarket = "Open a Manifold market page, then click the icon.";
+  if (!slug) { out.textContent = notAMarket; return; }
   let m;
   try { m = await j(`${API}/slug/${encodeURIComponent(slug)}`); }
-  catch (e) { out.textContent = "Couldn't load this market: " + e.message; return; }
+  catch (e) { out.textContent = notAMarket; return; } // most two-segment pages aren't markets
   if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") {
     out.textContent = "Only binary (YES/NO) markets are supported.";
     return;
   }
   if (m.isResolved) { out.textContent = "This market has already resolved."; return; }
   state.market = m;
+  setProb(100 * cpmmProb(m.pool, m.p)); // start the slider at the market's probability
 
   if (!stored.username) {
-    out.textContent = "Couldn't detect your Manifold user yet — browse manifold.markets while signed in once.";
+    // content.js may still be detecting; pick the username up the moment it lands
+    out.textContent = "Detecting your Manifold user… if this doesn't resolve, browse manifold.markets while signed in.";
+    const onStorage = (changes, area) => {
+      if (area !== "local" || !changes.username || !changes.username.newValue) return;
+      api.storage.onChanged.removeListener(onStorage);
+      state.username = changes.username.newValue;
+      refresh();
+    };
+    api.storage.onChanged.addListener(onStorage);
     return;
   }
   state.username = stored.username;
-  setProb(100 * cpmmProb(m.pool, m.p)); // start the slider at the market's probability
   refresh();
 })();

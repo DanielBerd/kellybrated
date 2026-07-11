@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.2.1
+// @version      1.3.0
 // @description  Shows the Kelly-optimal bet size in a small panel on Manifold binary market pages.
 // @author       Daniel & Claude
 // @match        https://manifold.markets/*
@@ -60,23 +60,34 @@
       typeof u.username === "string" && /^[\w.-]+$/.test(u.username) &&
       typeof u.id === "string" && typeof u.balance === "number";
   }
+  // Several user-shaped records can be cached at once (e.g. profiles the user
+  // viewed). Prefer the largest record: the signed-in user's cached document
+  // is the full profile, incidental caches are slimmer projections.
   function detectUsername() {
+    let best = null, bestSize = -1;
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const raw = localStorage.getItem(localStorage.key(i));
         if (!raw || raw[0] !== "{" || !raw.includes('"username"')) continue;
         let parsed;
         try { parsed = JSON.parse(raw); } catch (e) { continue; }
-        for (const cand of [parsed, parsed.user]) if (looksLikeUser(cand)) return cand.username;
+        for (const cand of [parsed, parsed.user]) {
+          if (looksLikeUser(cand) && raw.length > bestSize) {
+            best = cand.username;
+            bestSize = raw.length;
+          }
+        }
       }
     } catch (e) { /* storage blocked */ }
-    return null;
+    return best;
   }
-  let username = null;
+  let username = null, usernameDetected = false;
   function resolveUsername() {
+    if (usernameDetected) return true; // don't rescan localStorage on every refresh
     const detected = detectUsername();
     if (detected) {
       username = detected;
+      usernameDetected = true;
       try { localStorage.setItem(LAST_USER_KEY, detected); } catch (e) {}
       return true;
     }
@@ -85,15 +96,11 @@
   }
 
   // ---------- market-page URL parsing (same rules as the extension) ----------
-  const NON_MARKET_ROOTS = new Set([
-    "browse", "charity", "dashboard", "election", "group", "groups", "leagues",
-    "link", "links", "live", "messages", "news", "payments", "post", "questions",
-    "search", "sitemap", "styles", "topic", "topics", "tv",
-  ]);
+  // Whether the slug names a real market is decided by the /v0/slug fetch in
+  // onNavigate; any two-segment path is worth asking the API about.
   function slugFromPath(pathname) {
     const parts = pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || NON_MARKET_ROOTS.has(parts[0].toLowerCase())) return null;
-    return parts[1];
+    return parts.length === 2 ? parts[1] : null;
   }
 
   // ---------- theming (follows Manifold's dark-mode class live) ----------
@@ -196,7 +203,9 @@
     $("kelly-head").addEventListener("click", () => setCollapsed(body.style.display !== "none"));
     try { if (localStorage.getItem(COLLAPSED_KEY) === "1") setCollapsed(true); } catch (e) {}
 
-    try { setKelly(parseFloat(localStorage.getItem(KELLY_KEY)) || 50); } catch (e) { setKelly(50); }
+    let storedKelly = NaN;
+    try { storedKelly = parseFloat(localStorage.getItem(KELLY_KEY)); } catch (e) {}
+    setKelly(Number.isFinite(storedKelly) ? storedKelly : 50); // isFinite, not ||: 0 is a valid setting
 
     let t;
     const schedule = (refetch, ms) => { clearTimeout(t); t = setTimeout(() => refresh(refetch), ms); };
@@ -227,12 +236,14 @@
   async function loadUserData() {
     state.user = null; state.loans = 0; state.eYes = 0; state.eNo = 0;
     state.user = await j(`${API}/user/${encodeURIComponent(username)}`);
-    try { state.loans = (await j(`${API}/get-user-portfolio?userId=${state.user.id}`)).loanTotal || 0; } catch (e) {}
-    try {
-      for (const met of await j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`)) {
-        if (!met.answerId) { state.eYes += met.totalShares?.YES || 0; state.eNo += met.totalShares?.NO || 0; }
-      }
-    } catch (e) {}
+    const [portfolio, positions] = await Promise.all([
+      j(`${API}/get-user-portfolio?userId=${state.user.id}`).catch(() => null),
+      j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`).catch(() => null),
+    ]);
+    state.loans = (portfolio && portfolio.loanTotal) || 0;
+    for (const met of positions || []) {
+      if (!met.answerId) { state.eYes += met.totalShares?.YES || 0; state.eNo += met.totalShares?.NO || 0; }
+    }
     state.fetchedFor = username + "|" + state.market.id;
   }
 
