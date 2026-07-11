@@ -26,7 +26,7 @@
 
 <label>Your wallet address
   <input type="text" id="wallet" autocomplete="off" spellcheck="false" placeholder="0x...">
-  <span class="hint">The proxy wallet address shown on your Polymarket profile page.</span>
+  <span class="hint">The wallet address shown on your Polymarket profile page.</span>
 </label>
 <label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
 <label>Your probability estimate (%) <input type="number" id="prob" min="0" max="100" step="any"></label>
@@ -109,7 +109,7 @@ $("go").onclick = async () => {
     const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
     if (!(pu >= 0 && pu <= 1)) throw new Error("Probability estimate must be between 0 and 100.");
     const B = parseFloat($("balance").value);
-    if (!(B > 1)) throw new Error("Enter your available USDC balance.");
+    if (!(B > 0)) throw new Error("Enter your available USDC balance.");
 
     try { localStorage.setItem(LAST_WALLET_KEY, wallet); } catch (e) {}
 
@@ -156,7 +156,7 @@ $("go").onclick = async () => {
     if (eYes || eNo) lines.push(`Your position: ${(eYes - eNo).toFixed(2)} net ${eYes > eNo ? "YES" : "NO"} shares`);
     lines.push(`Kelly-adjusted estimate: ${pct(pYes)} YES`, "");
 
-    if (Math.abs(pYes - pm) < 1e-9 || M < 1) {
+    if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
       lines.push("Recommended bet: $0 — your Kelly-adjusted estimate is too close to the market price.");
     } else {
       const { shares, newProb } = walkAsks(asks, M);

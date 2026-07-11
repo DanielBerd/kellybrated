@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated for Polymarket
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.1.0
+// @version      1.1.1
 // @description  Shows the Kelly-optimal bet size in a small panel on Polymarket binary market pages.
 // @author       Daniel & Claude
 // @match        https://polymarket.com/*
@@ -208,7 +208,7 @@
       </div>
       <div id="kelly-body" style="padding:8px 10px;">
         <label for="kelly-wallet" style="display:block;">Wallet address
-          <span title="The proxy wallet address shown on your Polymarket profile page — used to look up your position in this market." style="cursor:help;">ⓘ</span></label>
+          <span title="The wallet address shown on your Polymarket profile page — used to look up your position in this market." style="cursor:help;">ⓘ</span></label>
         <input id="kelly-wallet" type="text" class="kelly-input" placeholder="0x…" spellcheck="false" style="${inpCss}">
         <label for="kelly-balance" style="display:block;">Available USDC
           <span title="Auto-detected from the Cash figure in the page header when you're signed in; type a value to override." style="cursor:help;">ⓘ</span></label>
@@ -310,7 +310,7 @@
     try {
       const wallet = ($("kelly-wallet").value || "").trim();
       const B = parseFloat($("kelly-balance").value);
-      if (!(B > 1)) { out.textContent = "Enter your available USDC balance."; return; }
+      if (!(B > 0)) { out.textContent = "Enter your available USDC balance."; return; }
       if (probPct == null) { out.textContent = "Set your probability estimate."; return; }
       const pu = probPct / 100;
       out.textContent = "…";
@@ -341,7 +341,7 @@
 
       const lines = [`Bankroll ${usd(B)}, Kelly-adjusted estimate ${pct(pYes)}`];
       if (eYes || eNo) lines.push(`Your position: ${(eYes - eNo).toFixed(2)} net ${eYes > eNo ? "YES" : "NO"} shares`);
-      if (Math.abs(pYes - pm) < 1e-9 || M < 1) {
+      if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
         lines.push("Recommended bet: $0 — too close to the market price.");
       } else {
         const { shares, newProb } = walkAsks(asks, M);
