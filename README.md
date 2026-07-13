@@ -21,19 +21,13 @@ Optionally, paste your Manifold API key (from your profile's account settings) t
 
 `user-script/kellybrated.user.js` puts the calculator directly on Manifold itself: whenever you browse to a binary market, a small collapsible "Kellybrated" panel appears in the bottom-right corner.
 
-To install open:
-
-```
-https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated.user.js
-```
+Install from [HERE](https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated.user.js)
 
 ### Polymarket userscript
 
-`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your wallet address (shown on your Polymarket profile) so the panel can look up your existing position. Install from:
+`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your wallet address (shown on your Polymarket profile) so the panel can look up your existing position. Install from [HERE](https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js)
 
-```
-https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js
-```
+
 
 There's also a standalone page version at [/polymarket-mini.html](https://danielberd.github.io/kellybrated/polymarket-mini.html).
 
