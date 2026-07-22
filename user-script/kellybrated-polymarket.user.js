@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated for Polymarket
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.1.1
+// @version      1.1.2
 // @description  Shows the Kelly-optimal bet size in a small panel on Polymarket binary market pages.
 // @author       Daniel & Claude
 // @match        https://polymarket.com/*
@@ -41,11 +41,16 @@
 
   // ---------- order-book sizing (same math as polymarket-mini.html) ----------
   // walk a token's ask book to price a market buy of `budget` USDC worth of shares
-  function walkAsks(asks, budget) {
-    const levels = asks
+  // Parse a raw ask list into ascending price levels once, so the optimizer can
+  // walk them repeatedly without re-sorting. `notional` is total book liquidity.
+  function parseBook(asks) {
+    const levels = (asks || [])
       .map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
       .filter((l) => l.price > 0 && l.size > 0)
       .sort((a, b) => a.price - b.price);
+    return { levels, notional: levels.reduce((s, l) => s + l.price * l.size, 0) };
+  }
+  function walkAsks(levels, budget) {
     let remaining = budget, shares = 0, lastPrice = levels[0] ? levels[0].price : null;
     for (const lvl of levels) {
       if (remaining <= 0) break;
@@ -54,7 +59,7 @@
       else { shares += remaining / lvl.price; remaining = 0; }
       lastPrice = lvl.price;
     }
-    return { shares, notional: levels.reduce((s, l) => s + l.price * l.size, 0), newProb: lastPrice };
+    return { shares, newProb: lastPrice };
   }
   function maximize(f, lo, hi, iters = 100) {
     const phi = (Math.sqrt(5) - 1) / 2;
@@ -300,7 +305,7 @@
     const idx = outcomes.indexOf(side.toLowerCase());
     const tokenId = arr(m.clobTokenIds)[idx];
     const book = await j(`${CLOB}/book?token_id=${tokenId}`);
-    state.books[side] = book.asks || [];
+    state.books[side] = parseBook(book.asks); // { levels, notional }, parsed once
     return state.books[side];
   }
 
@@ -327,12 +332,11 @@
 
       const pYes = f * pu + (1 - f) * pm;
       const side = pYes > pm ? "YES" : "NO";
-      const asks = await getBook(side);
-      if (!asks.length) { out.textContent = `No sell orders available for ${side} right now — can't size a bet.`; return; }
-      const { notional } = walkAsks(asks, Infinity);
+      const { levels, notional } = await getBook(side);
+      if (!levels.length) { out.textContent = `No sell orders available for ${side} right now — can't size a bet.`; return; }
 
       const J = (M) => {
-        const { shares } = walkAsks(asks, M);
+        const { shares } = walkAsks(levels, M);
         const wYes = B - M + eYes + (side === "YES" ? shares : 0);
         const wNo  = B - M + eNo  + (side === "NO"  ? shares : 0);
         return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
@@ -344,7 +348,7 @@
       if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
         lines.push("Recommended bet: $0 — too close to the market price.");
       } else {
-        const { shares, newProb } = walkAsks(asks, M);
+        const { shares, newProb } = walkAsks(levels, M);
         const pWin = side === "YES" ? pYes : 1 - pYes;
         lines.push(
           `Recommended bet: ${usd(M)} on ${side}`,

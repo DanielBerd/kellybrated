@@ -42,6 +42,7 @@
 
 <footer><a href="mini.html">Manifold version</a> · <a href="https://github.com/DanielBerd/kellybrated">source</a></footer>
 
+<script src="js/kelly.js"></script>
 <script>
 "use strict";
 const GAMMA = "https://gamma-api.polymarket.com";
@@ -52,12 +53,7 @@ const $ = id => document.getElementById(id);
 const usd = x => "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = x => (100 * x).toFixed(1) + "%";
 
-async function j(url) {
-  const res = await fetch(url);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
-  return body;
-}
+const { fetchJSON: j, goldenMaximize, parseBook, walkAsks } = window.Kelly;
 
 // arrays sometimes come back JSON-encoded as strings from the Gamma API
 function arr(v) {
@@ -69,33 +65,6 @@ function arr(v) {
 function slug(text) {
   const parts = text.trim().split(/[?#]/)[0].split("/").filter(Boolean);
   return parts[parts.length - 1] || "";
-}
-
-// walk a token's ask book to price a market buy of `budget` USDC worth of shares
-function walkAsks(asks, budget) {
-  const levels = asks
-    .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
-    .filter(l => l.price > 0 && l.size > 0)
-    .sort((a, b) => a.price - b.price);
-  let remaining = budget, shares = 0, lastPrice = levels[0] ? levels[0].price : null;
-  for (const lvl of levels) {
-    if (remaining <= 0) break;
-    const levelCost = lvl.price * lvl.size;
-    if (levelCost <= remaining) { shares += lvl.size; remaining -= levelCost; }
-    else { shares += remaining / lvl.price; remaining = 0; }
-    lastPrice = lvl.price;
-  }
-  return { shares, notional: levels.reduce((s, l) => s + l.price * l.size, 0), newProb: lastPrice };
-}
-
-function maximize(f, lo, hi, iters = 100) {
-  const phi = (Math.sqrt(5) - 1) / 2;
-  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
-  for (let i = 0; i < iters; i++) {
-    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
-    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
-  }
-  return (a + b) / 2;
 }
 
 $("go").onclick = async () => {
@@ -137,17 +106,16 @@ $("go").onclick = async () => {
     const pYes = f * pu + (1 - f) * pm;
     const side = pYes > pm ? "YES" : "NO";
     const book = await j(`${CLOB}/book?token_id=${tokenIds[side === "YES" ? yesIdx : noIdx]}`);
-    const asks = book.asks || [];
-    if (!asks.length) throw new Error(`No sell orders available for ${side} right now — can't size a bet.`);
-    const { notional } = walkAsks(asks, Infinity);
+    const { levels, notional } = parseBook(book.asks);
+    if (!levels.length) throw new Error(`No sell orders available for ${side} right now — can't size a bet.`);
 
     const J = M => {
-      const { shares } = walkAsks(asks, M);
+      const { shares } = walkAsks(levels, M);
       const wYes = B - M + eYes + (side === "YES" ? shares : 0);
       const wNo  = B - M + eNo  + (side === "NO"  ? shares : 0);
       return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
     };
-    const M = maximize(J, 0, Math.min(B, notional) * (1 - 1e-9));
+    const M = goldenMaximize(J, 0, Math.min(B, notional) * (1 - 1e-9)).x;
 
     const lines = [
       `Bankroll: ${usd(B)}`,
@@ -159,7 +127,7 @@ $("go").onclick = async () => {
     if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
       lines.push("Recommended bet: $0 — your Kelly-adjusted estimate is too close to the market price.");
     } else {
-      const { shares, newProb } = walkAsks(asks, M);
+      const { shares, newProb } = walkAsks(levels, M);
       const pWin = side === "YES" ? pYes : 1 - pYes;
       lines.push(
         `Recommended bet: ${usd(M)} on ${side}`,

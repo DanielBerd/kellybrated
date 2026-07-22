@@ -221,10 +221,12 @@
   </footer>
 </div>
 
+<script src="js/kelly.js"></script>
 <script>
 "use strict";
 (() => {
   const API = "https://api.manifold.markets/v0";
+  const { fetchJSON, goldenMaximize, cpmmProbability, betInfo: getBetInfo } = window.Kelly;
   const $ = (id) => document.getElementById(id);
 
   const state = {
@@ -256,41 +258,7 @@
     return Math.round(y) + " years";
   }
 
-  // ---------- CPMM math (Manifold's Maniswap, mirrors manifold's calculate-cpmm.ts) ----------
-  function cpmmProbability(pool, p) {
-    return (p * pool.NO) / (p * pool.NO + (1 - p) * pool.YES);
-  }
-  function cpmmShares(pool, p, bet, outcome) {
-    const y = pool.YES, n = pool.NO;
-    const k = Math.pow(y, p) * Math.pow(n, 1 - p);
-    return outcome === "YES"
-      ? y + bet - Math.pow(k * Math.pow(bet + n, p - 1), 1 / p)
-      : n + bet - Math.pow(k * Math.pow(bet + y, -p), 1 / (1 - p));
-  }
-  // shares received and market probability after a bet
-  function getBetInfo(market, bet, outcome) {
-    if (bet <= 0) return { shares: 0, newProb: cpmmProbability(market.pool, market.p) };
-    const shares = cpmmShares(market.pool, market.p, bet, outcome);
-    const newPool = outcome === "YES"
-      ? { YES: market.pool.YES + bet - shares, NO: market.pool.NO + bet }
-      : { YES: market.pool.YES + bet, NO: market.pool.NO + bet - shares };
-    return { shares, newProb: cpmmProbability(newPool, market.p) };
-  }
-
   // ---------- Kelly optimization ----------
-  function goldenMaximize(f, lo, hi, iters = 100) {
-    const phi = (Math.sqrt(5) - 1) / 2;
-    let a = lo, b = hi;
-    let c = b - phi * (b - a), d = a + phi * (b - a);
-    let fc = f(c), fd = f(d);
-    for (let i = 0; i < iters; i++) {
-      if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
-      else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
-    }
-    const x = (a + b) / 2;
-    return { x, fx: f(x) };
-  }
-
   // Expected log wealth of betting `amount` on `outcome`, with bankroll B and
   // existing shares (eYes, eNo) in this market. pYes = deferral-adjusted P(YES).
   function makeObjective(market, outcome, pYes, B, eYes, eNo) {
@@ -324,7 +292,7 @@
     const outcome = pYes > pMarket ? "YES" : "NO";
     if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (Kelly-adjusted) estimate matches the market — no bet." };
 
-    const maxBet = Math.min(B, user.balance) * (1 - 1e-9);
+    const maxBet = B * (1 - 1e-9); // B = balance − loans ≤ balance, so it's the binding cap
     const J = makeObjective(market, outcome, pYes, B, position.yes, position.no);
     const { x } = goldenMaximize(J, 0, maxBet);
     const amount = Math.round(x);
@@ -345,17 +313,6 @@
   }
 
   // ---------- API ----------
-  async function fetchJSON(url, opts) {
-    const res = await fetch(url, opts);
-    let body = null;
-    try { body = await res.json(); } catch (e) { /* non-JSON response */ }
-    if (!res.ok) {
-      const msg = body && (body.message || body.error) ? (body.message || body.error) : res.status + " " + res.statusText;
-      throw new Error(msg);
-    }
-    return body;
-  }
-
   function parseSlug(text) {
     text = text.trim();
     if (!text) return null;

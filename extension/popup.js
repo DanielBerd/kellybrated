@@ -5,39 +5,12 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const API = "https://api.manifold.markets/v0";
 
+// math + fetch come from kelly.js (loaded first in popup.html)
+const { fetchJSON: j, goldenMaximize, cpmmProbability: cpmmProb, betInfo } = self.Kelly;
+
 const $ = (id) => document.getElementById(id);
 const r = (x) => Math.round(x).toLocaleString("en-US");
 const pct = (x) => (100 * x).toFixed(1) + "%";
-
-async function j(url) {
-  const res = await fetch(url);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
-  return body;
-}
-
-// ---------- Manifold Maniswap CPMM (same math as the calculator pages) ----------
-const cpmmProb = (pool, p) => p * pool.NO / (p * pool.NO + (1 - p) * pool.YES);
-function betInfo(m, bet, side) {
-  const y = m.pool.YES, n = m.pool.NO, p = m.p;
-  const k = y ** p * n ** (1 - p);
-  const shares = side === "YES"
-    ? y + bet - (k * (bet + n) ** (p - 1)) ** (1 / p)
-    : n + bet - (k * (bet + y) ** -p) ** (1 / (1 - p));
-  const pool = side === "YES"
-    ? { YES: y + bet - shares, NO: n + bet }
-    : { YES: y + bet, NO: n + bet - shares };
-  return { shares, newProb: cpmmProb(pool, p) };
-}
-function maximize(f, lo, hi, iters = 100) {
-  const phi = (Math.sqrt(5) - 1) / 2;
-  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
-  for (let i = 0; i < iters; i++) {
-    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
-    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
-  }
-  return (a + b) / 2;
-}
 
 // ---------- sliders with click-to-type values ----------
 let probPct = null;
@@ -114,7 +87,7 @@ async function refresh() {
       const wNo  = B - M + state.eNo  + (side === "NO"  ? s : 0);
       return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
     };
-    const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
+    const M = Math.round(goldenMaximize(J, 0, B * (1 - 1e-9)).x);
 
     const headLine = `@${state.username} — bankroll M${r(B)}, Kelly-adjusted estimate ${pct(pYes)}`;
     if (Math.abs(pYes - pm) < 1e-9 || M < 1) {

@@ -35,49 +35,20 @@
 
 <footer><a href="index.html">Full version</a> · <a href="polymarket-mini.html">Polymarket version</a> · <a href="https://github.com/DanielBerd/kellybrated">source</a></footer>
 
+<script src="js/kelly.js"></script>
 <script>
 "use strict";
 const API = "https://api.manifold.markets/v0";
 const LAST_USER_KEY = "kelly-manifold:lastUser";  // shared with index.html
+const { fetchJSON: j, goldenMaximize, cpmmProbability: prob, betInfo } = window.Kelly;
 const $ = id => document.getElementById(id);
 const r = x => Math.round(x).toLocaleString("en-US");
 const pct = x => (100 * x).toFixed(1) + "%";
-
-async function j(url) {
-  const res = await fetch(url);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
-  return body;
-}
 
 // "https://manifold.markets/creator/some-slug?x#y" -> "some-slug"; bare slugs pass through
 function slug(text) {
   const parts = text.trim().split(/[?#]/)[0].split("/").filter(Boolean);
   return parts[parts.length - 1] || "";
-}
-
-// Manifold Maniswap CPMM
-const prob = (pool, p) => p * pool.NO / (p * pool.NO + (1 - p) * pool.YES);
-function betInfo(m, bet, side) {
-  const y = m.pool.YES, n = m.pool.NO, p = m.p;
-  const k = y ** p * n ** (1 - p);
-  const shares = side === "YES"
-    ? y + bet - (k * (bet + n) ** (p - 1)) ** (1 / p)
-    : n + bet - (k * (bet + y) ** -p) ** (1 / (1 - p));
-  const pool = side === "YES"
-    ? { YES: y + bet - shares, NO: n + bet }
-    : { YES: y + bet, NO: n + bet - shares };
-  return { shares, newProb: prob(pool, p) };
-}
-
-function maximize(f, lo, hi, iters = 100) {
-  const phi = (Math.sqrt(5) - 1) / 2;
-  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
-  for (let i = 0; i < iters; i++) {
-    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
-    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
-  }
-  return (a + b) / 2;
 }
 
 $("go").onclick = async () => {
@@ -118,7 +89,7 @@ $("go").onclick = async () => {
       const wNo  = B - M + eNo  + (side === "NO"  ? s : 0);
       return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
     };
-    const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
+    const M = Math.round(goldenMaximize(J, 0, B * (1 - 1e-9)).x);
 
     const lines = [
       ignoreLoans
