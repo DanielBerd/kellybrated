@@ -126,6 +126,24 @@ $("go").onclick = async () => {
   }
 };
 
+// keep the entered values in the URL so a reload restores them (like index.html)
+function syncUrl() {
+  const params = new URLSearchParams();
+  const u = $("user").value.trim();
+  const m = $("market").value.trim();
+  const p = $("prob").value;
+  const d = $("deferral").value;
+  if (u) params.set("user", u);
+  if (m) params.set("market", m);
+  if (p) params.set("prob", p);
+  if (d && d !== "50") params.set("deferral", d);  // 50 is the default
+  if ($("noloans").checked) params.set("ignoreLoans", "1");
+  const qs = params.toString();
+  history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+}
+["user", "market", "prob", "deferral"].forEach(id => $(id).addEventListener("input", syncUrl));
+$("noloans").addEventListener("change", syncUrl);
+
 // prefill from URL params (as sent by the browser extension), falling back to
 // the username remembered from the last successful calculation
 try {
@@ -136,6 +154,7 @@ try {
   if (q.get("deferral")) $("deferral").value = q.get("deferral");
   if (q.get("ignoreLoans") === "1") $("noloans").checked = true;
 } catch (e) {}
+syncUrl();  // reflect the remembered username / any prefill in the address bar
 if (window.self !== window.top) document.body.classList.add("embedded");
 </script>
 </body>
