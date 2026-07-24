@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.3.0
+// @version      1.4.0
 // @description  Shows the Kelly-optimal bet size in a small panel on Manifold binary market pages.
 // @author       Daniel & Claude
 // @match        https://manifold.markets/*
@@ -288,13 +288,22 @@
       }
       const { shares, newProb } = betInfo(m, M, side);
       const pWin = side === "YES" ? pYes : 1 - pYes;
-      out.textContent = [
+      const lines = [
         headLine,
         `Recommended bet: M${r(M)} on ${side}`,
         `Payout if ${side}: M${r(shares)} (profit M${r(shares - M)})`,
         `New market probability: ${pct(newProb)}`,
         `Expected profit: M${r(pWin * shares - M)}`,
-      ].join("\n");
+      ];
+      // Annualized return to the market's close, compounding this bet's return.
+      // Markets can resolve earlier than closeTime, so it's a lower bound.
+      const daysLeft = m.closeTime ? (m.closeTime - Date.now()) / 86400000 : null;
+      if (daysLeft != null && daysLeft > 0) {
+        const ann = Math.pow((pWin * shares) / M, 365.25 / daysLeft) - 1;
+        const annText = ann > 100 ? ">10,000%" : (100 * ann).toLocaleString("en-US", { maximumFractionDigits: 1 }) + "%";
+        lines.push(`Annualized return: ${annText} (${daysLeft < 1 ? "<1 day" : Math.round(daysLeft) + " days"} until close)`);
+      }
+      out.textContent = lines.join("\n");
     } catch (e) {
       out.textContent = "Error: " + e.message;
     }
