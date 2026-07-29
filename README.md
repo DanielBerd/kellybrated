@@ -4,6 +4,8 @@ A Kelly criterion bet size calculator for [Manifold Markets](https://manifold.ma
 
 **Live site:** https://danielberd.github.io/kellybrated/
 
+**Userscript:** https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated.user.js
+
 There is also a bare-bones variant at [/mini.html](https://danielberd.github.io/kellybrated/mini.html)
 
 ## How it works
@@ -17,30 +19,8 @@ Enter your Manifold username, a market URL, and your probability estimate. The c
 
 Optionally, paste your Manifold API key (from your profile's account settings) to place the bet directly from the full page. The key is only ever sent to the Manifold API.
 
-## Userscript (Greasemonkey / Tampermonkey / Violentmonkey)
+### Polymarket versions
 
-`user-script/kellybrated.user.js` puts the calculator directly on Manifold itself: whenever you browse to a binary market, a small collapsible "Kellybrated" panel appears in the bottom-right corner.
+**Minimal site:** https://danielberd.github.io/kellybrated/polymarket-mini.html
 
-Install from [HERE](https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated.user.js)
-
-### Polymarket userscript
-
-`user-script/kellybrated-polymarket.user.js` does the same on Polymarket binary market pages. Differences from the Manifold one: enter your wallet address (shown on your Polymarket profile) so the panel can look up your existing position. Install from [HERE](https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js)
-
-
-
-There's also a standalone page version at [/polymarket-mini.html](https://danielberd.github.io/kellybrated/polymarket-mini.html).
-
-## Development
-
-Every page is a single self-contained HTML file — markup, styles, and JavaScript
-inline, no build step and no dependencies. Edit it and open it straight from
-disk; `file://` is enough, since the pages only ever fetch Manifold's public API.
-(A static server works too if you prefer one, e.g. `python3 -m http.server`, but
-nothing requires it.)
-
-GitHub Pages deploys from `main` on every push.
-
-Implementation notes — the Kelly maths, the CPMM derivation, the Manifold API
-surface, and the per-file architecture — are in
-[docs/manifold-internals.md](docs/manifold-internals.md).
+**Userscript:** https://raw.githubusercontent.com/DanielBerd/kellybrated/main/user-script/kellybrated-polymarket.user.js
