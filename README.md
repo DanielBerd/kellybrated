@@ -34,12 +34,10 @@ There's also a standalone page version at [/polymarket-mini.html](https://daniel
 ## Development
 
 Every page is a single self-contained HTML file — markup, styles, and JavaScript
-inline, no build step and no dependencies. Serve the folder with any static
-server to work on it locally:
-
-```
-python3 -m http.server 8123
-```
+inline, no build step and no dependencies. Edit it and open it straight from
+disk; `file://` is enough, since the pages only ever fetch Manifold's public API.
+(A static server works too if you prefer one, e.g. `python3 -m http.server`, but
+nothing requires it.)
 
 GitHub Pages deploys from `main` on every push.
 
