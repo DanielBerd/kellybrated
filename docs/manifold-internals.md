@@ -8,14 +8,16 @@ during review.
 
 | File | Lines | Role |
 |---|---|---|
-| `js/kelly.js` | ~80 | Shared math + fetch. No DOM, no UI. |
-| `index.html` | ~610 | Full calculator page. The only surface that can place bets. |
-| `mini.html` | ~160 | Minimal calculator. Same math, no bet placement. |
-| `user-script/kellybrated.user.js` | ~335 | Injects a panel into manifold.markets itself. Self-contained by design. |
+| `index.html` | ~655 | Full calculator page. The only surface that can place bets. |
+| `mini.html` | ~190 | Minimal calculator. Same math, no bet placement. |
+| `user-script/kellybrated.user.js` | ~335 | Injects a panel into manifold.markets itself. |
+| `dedup.html` | ~650 | Scratch copy of `index.html` with consolidated CSS, for A/B comparison. Not linked from anywhere. |
 
-`extension/` is out of scope here, but its `popup.js` is a near-copy of the
-userscript's compute path and vendors a byte-identical `kelly.js`, so the math
-review below carries over to it unchanged.
+**Every file is standalone.** Markup, styles, and JavaScript are inline; there
+is no build step, no dependency, and no shared module. The Kelly maths is
+therefore duplicated across the surfaces on purpose — the tradeoff is that any
+change to the maths has to be applied in each file, and a reviewer should check
+they still agree. §6 lists what to diff.
 
 ---
 
@@ -92,7 +94,7 @@ and symmetrically for NO:
         s = n + M − ( k·(M + y)^(−p) )^(1/(1−p))
 ```
 
-These are `cpmmShares` in `js/kelly.js`, matching Manifold's own
+These are `cpmmShares` / `betInfo` in each file, matching Manifold's own
 `calculate-cpmm.ts`. `betInfo()` returns both the shares and the post-bet
 probability (recomputed from the updated pool), which is what drives the "New
 market probability" line.
@@ -167,8 +169,8 @@ annualized = (expected payout / cost) ^ (365.25 / daysUntilClose) − 1
            = (pWin · shares / M) ^ (365.25 / days) − 1
 ```
 
-Shown by `index.html` (as "% per year"), `mini.html`, the userscript, and the
-extension popup. Notes for review:
+Shown by `index.html` (as "% per year"), `mini.html`, and the userscript. Notes
+for review:
 
 - It uses `pWin` derived from **`pYes`** (the blended probability), not your raw
   estimate — so at `f = 50%` the figure reflects the half-Kelly belief, not
@@ -206,29 +208,34 @@ CPMM formulas above are only valid for `cpmm-1`.
 **Position filtering.** Entries carrying an `answerId` belong to multi-choice
 answers and are skipped; only the top-level binary position is summed.
 
-`fetchJSON` (`js/kelly.js`) unwraps Manifold's error shape, preferring
+The fetch helper (`fetchJSON` / `j`) unwraps Manifold's error shape, preferring
 `body.message` / `body.error` over the bare HTTP status, so API errors surface
 as readable text.
 
 ---
 
-## 3. `js/kelly.js` — the shared core
+## 3. The duplicated core
 
-Loaded as a plain script; exposes a `Kelly` global. No build step, so no
-imports/exports. Pure functions only — it never touches the DOM.
+Each surface carries its own copy of four helpers. They are semantically
+identical; only naming and return shape differ, which is the thing to watch when
+diffing them.
 
-```
-fetchJSON(url, opts)            → parsed JSON, throws Error with API message
-goldenMaximize(f, lo, hi, n)    → { x, fx }
-cpmmProbability(pool, p)        → market probability
-betInfo(market, bet, outcome)   → { shares, newProb }
-parseBook(asks) / walkAsks(…)   → Polymarket only, unused by Manifold surfaces
-```
+| Concept | `index.html` / `dedup.html` | `mini.html` | userscript |
+|---|---|---|---|
+| fetch + error unwrap | `fetchJSON` | `j` | `j` |
+| market probability | `cpmmProbability` | `prob` | `cpmmProb` |
+| shares + new probability | `getBetInfo` | `betInfo` | `betInfo` |
+| optimizer | `goldenMaximize` → `{x, fx}` | `maximize` → number | `maximize` → number |
 
-`extension/kelly.js` is a **byte-identical vendored copy**: MV3's content
-security policy forbids an extension page loading a script from the website's
-origin, so the file is duplicated deliberately. Both copies carry a "keep in
-sync" header comment. There is no automated check that they match — see §6.
+`index.html` needs the `{x, fx}` shape because it also evaluates the objective
+directly (for the portfolio-growth figure); the other two only need the argmax.
+`index.html` splits the CPMM into `cpmmShares` + `getBetInfo`, while the smaller
+surfaces inline the share formula into a single `betInfo` — same algebra, written
+with `**` instead of `Math.pow`.
+
+This duplication is a deliberate structural choice: every page stays a single
+file you can save, open, or audit on its own, with no build step. The cost is
+that the maths must be kept in step by hand.
 
 ---
 
@@ -285,16 +292,17 @@ never logged. It must be re-entered after a reload — deliberate.
 Same math, no live recalculation: everything happens in one `#go` click
 handler, output is a single pre-wrapped text block. It shares
 `LAST_USER_KEY` with `index.html`, so the remembered username carries between
-them, and accepts the same URL parameters minus the legacy `*Input` aliases
-(this is also how the browser extension prefills it). `body.embedded` compacts the layout when the
-page is framed.
+them, and accepts the same URL parameters minus the legacy `*Input` aliases.
+Like `index.html`, it mirrors its inputs into the query string on every change
+so a reload restores them. `body.embedded` compacts the layout when the page is
+framed.
 
 ### 4.3 `user-script/kellybrated.user.js`
 
 Runs at `document-idle` on `https://manifold.markets/*`, `@grant none`,
-`@noframes`. Intentionally standalone — it duplicates the math rather than
-`@require`-ing `kelly.js`, to keep installation to a single file with no
-load-time dependency on raw.githubusercontent.
+`@noframes`. It carries its own copy of the maths rather than `@require`-ing a
+hosted file, so installation stays one file with no load-time dependency on
+raw.githubusercontent.
 
 **Lifecycle**
 
@@ -382,9 +390,13 @@ Ordered by how much I'd want a second opinion, not by severity.
    assume it reflects *their* belief. Defensible either way — but it is a
    deliberate choice that should be conscious, and possibly labelled.
 
-4. **Two copies of `kelly.js`.** Required by MV3's CSP, kept in sync by hand and
-   by a comment. Nothing fails loudly if they drift. A one-line CI check
-   (`diff js/kelly.js extension/kelly.js`) would close this.
+4. **Three hand-maintained copies of the maths** (§3). Nothing fails loudly if
+   they drift — a fix applied to `index.html` alone would leave `mini.html` and
+   the userscript quietly wrong. When reviewing, diff the four helpers across
+   the files and confirm they still agree. The test suites give partial cover
+   here: each surface is exercised against the same stub, so a divergence in
+   the recommendation would surface, though not every input combination is
+   checked.
 
 5. **Annualization inconsistency.** `index.html` floors the horizon at one day;
    `mini.html` and the userscript cap the display at `>10,000%`. Both avoid
@@ -420,9 +432,11 @@ call and serve the repo locally, so no live Manifold access is needed):
 - `test_userscript.js` — 29 checks. Injects the userscript into a faked Manifold
   SPA: panel lifecycle, sliders and click-to-type, detection with a decoy
   localStorage record, theme switching, navigation, persistence.
-- `test_extension.js` — 32 checks. Loads the unpacked extension, and also
-  exercises `index.html` and `mini.html` end-to-end, including a
-  "no page errors" assertion.
+- `test_pages.js` — 22 checks. Serves the repo and drives `index.html`,
+  `dedup.html`, and `mini.html`: loading, recommendation, annualized return,
+  URL round-tripping, the API-key gate on PLACE BET, rejection of
+  multiple-choice markets, framed compact mode, and a "no page errors"
+  assertion that would catch a missing inline helper.
 
 Both must pass before publishing. Neither covers live Manifold API shapes — they
 assert against stubs written from the documented responses.

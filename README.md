@@ -31,20 +31,18 @@ Install from [HERE](https://raw.githubusercontent.com/DanielBerd/kellybrated/mai
 
 There's also a standalone page version at [/polymarket-mini.html](https://danielberd.github.io/kellybrated/polymarket-mini.html).
 
-## Browser extension
+## Development
 
-`extension/` contains a small Chrome/Firefox extension (one shared codebase, Manifest V3) with the same compact panel as the userscript.
+Every page is a single self-contained HTML file — markup, styles, and JavaScript
+inline, no build step and no dependencies. Serve the folder with any static
+server to work on it locally:
 
-### Install in Chrome
+```
+python3 -m http.server 8123
+```
 
-1. Download this repository (Code → Download ZIP, then unzip — or `git clone`).
-2. Open `chrome://extensions`, enable **Developer mode** (top right).
-3. Click **Load unpacked** and select the `extension/` folder.
+GitHub Pages deploys from `main` on every push.
 
-### Install in Firefox
-
-Temporary (resets when Firefox restarts): open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → pick `extension/manifest.json`.
-
-For a permanent install, Firefox requires the extension to be signed: zip the contents of `extension/` and submit it at [addons.mozilla.org](https://addons.mozilla.org/developers/) ("on your own" / unlisted is fine), then install the signed `.xpi` it gives back.
-
-Firefox treats host permissions as opt-in: to let the extension auto-detect your username, open the extension's **Permissions** tab in `about:addons` and enable access for manifold.markets.
+Implementation notes — the Kelly maths, the CPMM derivation, the Manifold API
+surface, and the per-file architecture — are in
+[docs/manifold-internals.md](docs/manifold-internals.md).

@@ -42,7 +42,6 @@
 
 <footer><a href="mini.html">Manifold version</a> · <a href="https://github.com/DanielBerd/kellybrated">source</a></footer>
 
-<script src="js/kelly.js"></script>
 <script>
 "use strict";
 const GAMMA = "https://gamma-api.polymarket.com";
@@ -53,7 +52,45 @@ const $ = id => document.getElementById(id);
 const usd = x => "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = x => (100 * x).toFixed(1) + "%";
 
-const { fetchJSON: j, goldenMaximize, parseBook, walkAsks } = window.Kelly;
+async function j(url) {
+  const res = await fetch(url);
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body && (body.message || body.error)) || res.status + " " + res.statusText);
+  return body;
+}
+
+// Parse a raw ask list into ascending price levels once, so the optimizer can
+// walk them repeatedly without re-sorting. `notional` is total book liquidity.
+function parseBook(asks) {
+  const levels = (asks || [])
+    .map(l => ({ price: parseFloat(l.price), size: parseFloat(l.size) }))
+    .filter(l => l.price > 0 && l.size > 0)
+    .sort((a, b) => a.price - b.price);
+  return { levels, notional: levels.reduce((s, l) => s + l.price * l.size, 0) };
+}
+// market-buy `budget` USDC against pre-parsed ascending `levels`
+function walkAsks(levels, budget) {
+  let remaining = budget, shares = 0, lastPrice = levels[0] ? levels[0].price : null;
+  for (const lvl of levels) {
+    if (remaining <= 0) break;
+    const levelCost = lvl.price * lvl.size;
+    if (levelCost <= remaining) { shares += lvl.size; remaining -= levelCost; }
+    else { shares += remaining / lvl.price; remaining = 0; }
+    lastPrice = lvl.price;
+  }
+  return { shares, newProb: lastPrice };
+}
+
+// golden-section maximization of the (concave) objective
+function goldenMaximize(f, lo, hi, iters = 100) {
+  const phi = (Math.sqrt(5) - 1) / 2;
+  let a = lo, b = hi, c = b - phi * (b - a), d = a + phi * (b - a), fc = f(c), fd = f(d);
+  for (let i = 0; i < iters; i++) {
+    if (fc > fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = f(c); }
+    else         { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = f(d); }
+  }
+  return { x: (a + b) / 2 };
+}
 
 // arrays sometimes come back JSON-encoded as strings from the Gamma API
 function arr(v) {
