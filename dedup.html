@@ -247,13 +247,7 @@
     const d = ms / 86400000;
     if (d < 1) return "less than a day";
     if (d < 1.5) return "a day";
-    if (d < 28) return Math.round(d) + " days";
-    const mo = d / 30.44;
-    if (mo < 1.5) return "a month";
-    if (mo < 11) return Math.round(mo) + " months";
-    const y = d / 365.25;
-    if (y < 1.5) return "a year";
-    return Math.round(y) + " years";
+    return Math.round(d) + " days";
   }
 
   // ---------- CPMM math (Manifold's Maniswap, mirrors manifold's calculate-cpmm.ts) ----------
@@ -310,8 +304,9 @@
     const defPct  = parseFloat($("deferral-input").value);
     if (!user || !market || !isFinite(probPct)) return null;
     if (probPct < 0 || probPct > 100) return { error: "Probability estimate must be between 0 and 100." };
+    if (!isFinite(defPct) || defPct < 0 || defPct > 100) return { error: "Kelly factor must be between 0 and 100." };
 
-    const f = isFinite(defPct) ? Math.min(Math.max(defPct / 100, 0), 1) : 0.5;
+    const f = defPct / 100;
     const pMarket = cpmmProbability(market.pool, market.p);
     const pUser = probPct / 100;
     // Kelly factor: treat the "true" probability as f of the way from the
