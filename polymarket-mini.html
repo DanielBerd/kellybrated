@@ -111,9 +111,12 @@ $("go").onclick = async () => {
   try {
     const wallet = $("wallet").value.trim();
     if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) throw new Error("Enter a valid wallet address (0x… , 40 hex characters).");
-    const pu = parseFloat($("prob").value) / 100;
-    const f = Math.min(Math.max((parseFloat($("deferral").value) || 0) / 100, 0), 1);
-    if (!(pu >= 0 && pu <= 1)) throw new Error("Probability estimate must be between 0 and 100.");
+    const probPct = parseFloat($("prob").value);
+    const defPct = parseFloat($("deferral").value);
+    if (!(probPct >= 0 && probPct <= 100)) throw new Error("Probability estimate must be between 0 and 100.");
+    if (!(defPct >= 0 && defPct <= 100)) throw new Error("Kelly factor must be between 0 and 100.");
+    const pu = probPct / 100;
+    const f = defPct / 100;
     const B = parseFloat($("balance").value);
     if (!(B > 0)) throw new Error("Enter your available USDC balance.");
 
