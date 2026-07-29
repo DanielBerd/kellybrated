@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.4.0
+// @version      1.5.0
 // @description  Shows the Kelly-optimal bet size in a small panel on Manifold binary market pages.
 // @author       Daniel & Claude
 // @match        https://manifold.markets/*
@@ -188,7 +188,7 @@
         <input id="kelly-factor" type="range" min="0" max="100" step="1"
                style="width:100%;margin:4px 0 8px;accent-color:#2a9d8f;display:block;">
         <label style="display:block;margin-bottom:6px;">
-          <input id="kelly-noloans" type="checkbox"> Ignore loans</label>
+          <input id="kelly-noloans" type="checkbox"> Cash-only bankroll</label>
         <div id="kelly-out" style="white-space:pre-line;border-top:1px solid;padding-top:6px;min-height:1em;"></div>
       </div>`;
     document.body.appendChild(box);
@@ -231,16 +231,17 @@
   }
 
   // ---------- data + compute ----------
-  const state = { market: null, user: null, loans: 0, eYes: 0, eNo: 0, fetchedFor: "" };
+  const state = { market: null, user: null, loans: 0, invested: 0, eYes: 0, eNo: 0, fetchedFor: "" };
 
   async function loadUserData() {
-    state.user = null; state.loans = 0; state.eYes = 0; state.eNo = 0;
+    state.user = null; state.loans = 0; state.invested = 0; state.eYes = 0; state.eNo = 0;
     state.user = await j(`${API}/user/${encodeURIComponent(username)}`);
     const [portfolio, positions] = await Promise.all([
       j(`${API}/get-user-portfolio?userId=${state.user.id}`).catch(() => null),
       j(`${API}/market/${state.market.id}/positions?userId=${state.user.id}`).catch(() => null),
     ]);
     state.loans = (portfolio && portfolio.loanTotal) || 0;
+    state.invested = (portfolio && portfolio.investmentValue) || 0;
     for (const met of positions || []) {
       if (!met.answerId) { state.eYes += met.totalShares?.YES || 0; state.eNo += met.totalShares?.NO || 0; }
     }
@@ -266,11 +267,20 @@
 
       const m = state.market;
       const f = Math.min(Math.max(kellyPct / 100, 0), 1);
-      const loans = $("kelly-noloans").checked ? 0 : state.loans;
-      const B = state.user.balance - loans;
-      if (B <= 1) { out.textContent = `@${username} — bankroll M${r(B)}: nothing to bet.`; return; }
-
       const pm = cpmmProb(m.pool, m.p);
+      // Wealth base: cash + positions in OTHER markets. This market's position
+      // enters via eYes/eNo below, so it must not be counted twice.
+      // investmentValue is already net of loans (spread proportionally), so
+      // scale this market's gross position by the same net fraction.
+      const cashOnly = $("kelly-noloans").checked;
+      const cash = state.user.balance;
+      const grossInvested = state.invested + state.loans;
+      const netFraction = grossInvested > 0 ? state.invested / grossInvested : 1;
+      const positionHere = (state.eYes * pm + state.eNo * (1 - pm)) * netFraction;
+      const elsewhere = cashOnly ? 0 : Math.max(state.invested - positionHere, 0);
+      const B = cash + elsewhere;
+      if (cash < 1) { out.textContent = `@${username} — balance M${r(cash)}: nothing to bet.`; return; }
+
       const pYes = f * pu + (1 - f) * pm;
       const side = pYes > pm ? "YES" : "NO";
       const J = (M) => {
@@ -279,7 +289,7 @@
         const wNo  = B - M + state.eNo  + (side === "NO"  ? s : 0);
         return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
       };
-      const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
+      const M = Math.round(maximize(J, 0, Math.min(B, cash) * (1 - 1e-9)));  // can only stake mana you hold
 
       const headLine = `@${username} — bankroll M${r(B)}, Kelly-adjusted estimate ${pct(pYes)}`;
       if (Math.abs(pYes - pm) < 1e-9 || M < 1) {

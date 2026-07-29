@@ -141,7 +141,7 @@
         <div class="info-name" id="user-name"></div>
         <div class="info-row"><span>Balance:</span><span class="val green" id="user-balance">M—</span></div>
         <div class="info-row"><span>Total loans:</span><span class="val red" id="user-loans">M—</span></div>
-        <div class="info-row"><span>Portfolio value:</span><span class="val green" id="user-portfolio">M—</span></div>
+        <div class="info-row"><span>Net worth:</span><span class="val green" id="user-portfolio">M—</span></div>
       </div>
     </div>
     <div class="field-note hidden" id="user-note"></div>
@@ -178,7 +178,7 @@
     <label class="section-label mt" for="deferral-input">Kelly factor (0–100%)</label>
     <p class="hint">A lower value means you are deferring to the market more, so taking less risk. This is equivalent to <a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">"fractional Kelly betting"</a></p>
     <input class="num-input" id="deferral-input" type="number" min="0" max="100" step="any" value="50" inputmode="decimal">
-    <label class="check-label"><input type="checkbox" id="ignore-loans"> Ignore loans — use the full balance as the bankroll</label>
+    <label class="check-label"><input type="checkbox" id="cash-only"> Bankroll = cash only (ignore the value of my open positions)</label>
 
     <div id="results" class="hidden">
       <div class="result-row"><span><b>Recommended bet</b>:</span><span class="val" id="rec-bet">—</span></div>
@@ -210,8 +210,9 @@
   <footer>
     A simplified rebuild of <a href="https://github.com/Will-Howard/manifolio" target="_blank" rel="noopener">manifolio</a>.
     The recommendation maximizes expected log wealth, accounting for the price impact of your bet (CPMM liquidity)
-    and your existing position in this market. Bankroll = balance − loans (or the full balance with the
-    ignore-loans toggle). It ignores limit orders in the
+    and your existing position in this market. Bankroll = your net worth (balance + the value of your open
+    positions, which Manifold reports net of loans), and the recommended bet is capped at the mana you
+    actually hold. It ignores limit orders in the
     order book and correlations with the rest of your portfolio. Your API key is only sent to the Manifold API.
   </footer>
 </div>
@@ -233,6 +234,10 @@
   const fmtM   = (x) => "M" + Math.round(x).toLocaleString("en-US");
   const fmtPct = (x) => (100 * x).toFixed(1) + "%";
   const fmtPctPerYear = (x) => {
+    if (Number.isNaN(x)) return "—";
+    // Cap before the finite check: compounding a near-close market over a year
+    // overflows to Infinity, which is ">10,000%", not "unknown".
+    if (x > 100) return ">10,000% per year";  // same cap as mini.html / the userscript
     if (!isFinite(x)) return "—";
     const pct = 100 * x;
     const s = Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(1);
@@ -313,23 +318,38 @@
     // market's estimate to yours (equivalent to fractional Kelly).
     const pYes = f * pUser + (1 - f) * pMarket;
 
-    const ignoreLoans = $("ignore-loans").checked;
-    const B = user.balance - (ignoreLoans ? 0 : user.loans);
-    if (B <= 1) return { error: (ignoreLoans ? "Balance is M" : "Balance minus loans is M") + Math.round(B) + " — nothing safe to bet." };
+    // Wealth base for the log-utility: cash plus the value of positions in
+    // OTHER markets. This market's position is excluded here because it enters
+    // the objective as the eYes/eNo payout terms instead — counting it in both
+    // places would double it. investmentValue is already net of loans, and
+    // Manifold spreads loans proportionally across positions, so this market's
+    // gross value is scaled by the same net fraction before being removed.
+    const cashOnly = $("cash-only").checked;
+    const cash = user.balance;
+    const grossInvested = user.invested + user.loans;
+    const netFraction = grossInvested > 0 ? user.invested / grossInvested : 1;
+    const positionHere = (position.yes * pMarket + position.no * (1 - pMarket)) * netFraction;
+    const elsewhere = cashOnly ? 0 : Math.max(user.invested - positionHere, 0);
+    const B = cash + elsewhere;
+    if (cash < 1) return { error: "Balance is M" + Math.round(cash) + " — no mana available to bet." };
+    if (B <= 1) return { error: "Nothing to bet." };
 
     const outcome = pYes > pMarket ? "YES" : "NO";
     if (Math.abs(pYes - pMarket) < 1e-6) return { error: "Your (Kelly-adjusted) estimate matches the market — no bet." };
 
-    const maxBet = B * (1 - 1e-9); // B = balance − loans ≤ balance, so it's the binding cap
+    // You can stake at most the mana you actually hold, however large the
+    // wealth base is — positions elsewhere aren't liquid.
+    const maxBet = Math.min(B, cash) * (1 - 1e-9);
     const J = makeObjective(market, outcome, pYes, B, position.yes, position.no);
     const { x } = goldenMaximize(J, 0, maxBet);
     const amount = Math.round(x);
 
     const pWin = outcome === "YES" ? pYes : 1 - pYes;
-    const now = Date.now();
-    const tYears = market.closeTime
-      ? Math.max((market.closeTime - now) / (365.25 * 86400000), 1 / 365.25)
-      : null;
+    // Horizon to the market's close. No floor: a near-close market genuinely
+    // annualizes to an enormous figure, and fmtPctPerYear caps the display
+    // rather than the input (matching mini.html and the userscript).
+    const msLeft = market.closeTime ? market.closeTime - Date.now() : null;
+    const tYears = msLeft !== null && msLeft > 0 ? msLeft / (365.25 * 86400000) : null;
 
     if (amount < 1) return { error: "No bet recommended at these odds." };
 
@@ -400,15 +420,19 @@
 
       state.user = {
         id: u.id, username: u.username, name: u.name || u.username, avatarUrl: u.avatarUrl,
-        balance: u.balance, loans,
-        portfolio: u.balance - loans + invested,
+        balance: u.balance, loans, invested,
+        // investmentValue is ALREADY net of outstanding loans — it equals the
+        // "Equity" Manifold shows on its loan page. Subtracting loanTotal here
+        // too would count the debt twice; balance + investmentValue is the
+        // "net worth" figure on the Manifold profile.
+        netWorth: u.balance + invested,
       };
       // the API key lives on the user's own profile page under account settings
       $("api-key-link").href = "https://manifold.markets/" + encodeURIComponent(u.username) + "?tab=account+settings";
       $("user-name").textContent = state.user.name;
       $("user-balance").textContent = fmtM(state.user.balance);
       $("user-loans").textContent = fmtM(state.user.loans);
-      $("user-portfolio").textContent = fmtM(state.user.portfolio);
+      $("user-portfolio").textContent = fmtM(state.user.netWorth);
       const av = $("user-avatar");
       if (state.user.avatarUrl) { av.src = state.user.avatarUrl; av.style.visibility = "visible"; }
       else { av.removeAttribute("src"); av.style.visibility = "hidden"; }
@@ -607,7 +631,7 @@
     if (m) params.set("market", m);
     if (p) params.set("prob", p);
     if (d && d !== "50") params.set("deferral", d);
-    if ($("ignore-loans").checked) params.set("ignoreLoans", "1");
+    if ($("cash-only").checked) params.set("cashOnly", "1");
     const qs = params.toString();
     history.replaceState(null, "", qs ? "?" + qs : location.pathname);
   }
@@ -621,7 +645,7 @@
     if (market) $("market-input").value = market;
     if (q.get("prob")) $("prob-input").value = q.get("prob");
     if (q.get("deferral")) $("deferral-input").value = q.get("deferral");
-    if (q.get("ignoreLoans") === "1") $("ignore-loans").checked = true;
+    if (q.get("cashOnly") === "1" || q.get("ignoreLoans") === "1") $("cash-only").checked = true;
   }
 
   // ---------- wiring ----------
@@ -636,7 +660,7 @@
   $("market-clear").addEventListener("click", () => { $("market-input").value = ""; loadMarket(); });
   $("prob-input").addEventListener("input", debounce(refresh, 300));
   $("deferral-input").addEventListener("input", debounce(refresh, 300));
-  $("ignore-loans").addEventListener("change", refresh);
+  $("cash-only").addEventListener("change", refresh);
   $("bet-amount").addEventListener("input", renderBetPanel);
   $("api-key").addEventListener("input", renderBetPanel);
   $("place-bet").addEventListener("click", placeBet);

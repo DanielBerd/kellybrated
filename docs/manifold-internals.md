@@ -1,7 +1,7 @@
 # Kellybrated internals — Manifold surfaces
 
-Reference documentation for the Manifold-facing code: the shared math core, the
-two web pages, and the userscript. Written to be read alongside the source
+Reference documentation for the Manifold-facing code: the two web pages and the
+userscript. Written to be read alongside the source
 during review.
 
 **Files covered**
@@ -147,20 +147,51 @@ this is a "harmless waste", not a bug.
 Results are rounded with `Math.round` and suppressed below M1, since Manifold
 bets are whole mana.
 
-### 1.5 Bankroll and loans
+### 1.5 Bankroll, loans, and why `investmentValue` is subtle
 
 ```
-B = balance − loans        (default)
-B = balance                (with "ignore loans" checked)
+B    = balance + (investmentValue − thisMarketPosition)   (default)
+B    = balance                                            (cash-only checkbox)
+stake ≤ balance                                           (always)
 ```
 
-Manifold lends mana against open positions; those loans are repaid out of the
-proceeds when markets resolve, so they are genuine liabilities and the default
-subtracts them. `loanTotal` comes from `/get-user-portfolio`. If that endpoint
-fails, loans fall back to `0` — i.e. **a portfolio-fetch failure silently makes
-the bankroll look larger**, which is worth knowing (see §6).
+**The key fact: `investmentValue` from `/get-user-portfolio` is already net of
+outstanding loans.** It is the same number Manifold calls "Equity" on its loan
+page. Verified against a real account:
 
-Every surface refuses to recommend when `B <= 1`.
+| Manifold shows | API arithmetic |
+|---|---|
+| profile net worth 27,218 | `balance + investmentValue` = 27,219 |
+| loan page Equity 20,405 | `investmentValue` = 20,406 |
+| loan page Portfolio value 37,625 | `investmentValue + loanTotal` = 37,626 |
+
+So `balance − loanTotal` — what every surface used to compute — **subtracts the
+debt twice**, because the loan has already been netted out of `investmentValue`.
+For a leveraged account it goes negative (that same account: 6,813 − 17,220 =
+−10,407), tripping the "nothing to bet" guard and making the tool refuse to
+work at all.
+
+The wealth base is therefore cash plus positions, with two adjustments:
+
+1. **This market's position is removed from the base**, because it re-enters the
+   objective as the `eYes`/`eNo` payout terms (§1.1). Counting it in both places
+   would double it. Its gross value is scaled by
+   `investmentValue / (investmentValue + loanTotal)` first, since
+   `investmentValue` is net and Manifold spreads loans proportionally across
+   positions ("Loans are distributed proportionally across your unresolved
+   positions").
+2. **The stake is capped at `balance`**, however large the base is — positions
+   in other markets are wealth, but they are not mana you can bet today.
+
+If `/get-user-portfolio` fails, `investmentValue` falls back to `0`, which
+collapses the bankroll to cash. That errs conservative (under-bets) rather than
+the old failure mode, which inflated it.
+
+Every surface refuses to recommend when `balance < 1`.
+
+Known simplification: the payout terms `eYes`/`eNo` are gross share counts, so
+the loan attributable to *this* market's position is not deducted from its
+payout branch. Third-order relative to the above; noted rather than modelled.
 
 ### 1.6 Annualized return
 
@@ -358,7 +389,7 @@ deliberate 0 survives a reload.
 | Bankroll ≤ M1 | Refuses with an explanatory message. |
 | Optimal bet rounds below M1 | Reported as M0 rather than a sub-mana bet. |
 | Existing position in the market | Added to the matching branch's wealth; can legitimately produce M0 ("already over-exposed"). |
-| Portfolio endpoint fails | Loans = 0 → bankroll looks larger. Silent. |
+| Portfolio endpoint fails | investmentValue = 0 → bankroll collapses to cash. Silent, but conservative. |
 | Positions endpoint fails | Position = 0 → bet sized as if flat. Silent. |
 | Market resolved / not binary / not `cpmm-1` | Rejected up front on every surface. |
 | Market closed but unresolved | The page notes it; the API will reject a bet. |
@@ -379,10 +410,11 @@ Ordered by how much I'd want a second opinion, not by severity.
    panel should display the detected username prominently enough that a wrong
    guess is obvious (it currently shows `@name` in the output line).
 
-2. **Silent degradation of loans and positions.** Both fetches swallow errors
-   and fall back to zero. Falling back on loans is the risky direction: it
-   *overstates* the bankroll and therefore oversizes the bet. Consider
-   surfacing "couldn't load loans" instead of proceeding quietly.
+2. **Silent degradation of the portfolio and position fetches.** Both swallow
+   errors and fall back to zero. Since the bankroll fix (§1.5) both failures now
+   err conservative — a failed portfolio fetch collapses the bankroll to cash
+   and under-bets — but they are still silent. Consider surfacing "couldn't load
+   your positions" rather than quietly sizing against a smaller bankroll.
 
 3. **Which probability drives the reported figures.** "Expected profit" and
    "Annualized return" use the Kelly-blended `pYes`, not your raw estimate. At

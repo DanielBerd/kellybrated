@@ -28,7 +28,7 @@
 <label>Market URL or slug <input type="text" id="market" autocomplete="off" spellcheck="false"></label>
 <label>Your probability estimate (%) <input type="number" id="prob" min="0" max="100" step="any"></label>
 <label><a href="https://www.lesswrong.com/posts/TNWnK9g2EeRnQA8Dg/never-go-full-kelly" target="_blank" rel="noopener">Kelly factor</a> (0–100%) — 50 = half Kelly <input type="number" id="deferral" value="50" min="0" max="100" step="any"></label>
-<label><input type="checkbox" id="noloans"> Ignore loans — bankroll = full balance</label>
+<label><input type="checkbox" id="noloans"> Bankroll = cash only (ignore my open positions)</label>
 <button id="go">Calculate</button>
 
 <div id="out"></div>
@@ -99,9 +99,13 @@ $("go").onclick = async () => {
     if (m.outcomeType !== "BINARY" || m.mechanism !== "cpmm-1") throw new Error("Only binary (YES/NO) markets are supported.");
     if (m.isResolved) throw new Error("This market has already resolved.");
 
-    const ignoreLoans = $("noloans").checked;
-    let loans = 0;
-    if (!ignoreLoans) try { loans = (await j(`${API}/get-user-portfolio?userId=${u.id}`)).loanTotal || 0; } catch (e) {}
+    const cashOnly = $("noloans").checked;
+    let loans = 0, invested = 0;
+    try {
+      const pf = await j(`${API}/get-user-portfolio?userId=${u.id}`);
+      loans = pf.loanTotal || 0;
+      invested = pf.investmentValue || 0;
+    } catch (e) {}
     let eYes = 0, eNo = 0;
     try {
       for (const met of await j(`${API}/market/${m.id}/positions?userId=${u.id}`)) {
@@ -109,9 +113,18 @@ $("go").onclick = async () => {
       }
     } catch (e) {}
 
-    const B = u.balance - loans;
-    if (B <= 1) throw new Error(`${ignoreLoans ? "Balance" : "Balance minus loans"} is M${r(B)} — nothing to bet.`);
     const pm = prob(m.pool, m.p);
+    // Wealth base: cash + positions held in OTHER markets. This market's
+    // position enters via eYes/eNo below, so counting it here too would double
+    // it. investmentValue is already net of loans (Manifold spreads them
+    // proportionally), so scale this position by the same net fraction.
+    const grossInvested = invested + loans;
+    const netFraction = grossInvested > 0 ? invested / grossInvested : 1;
+    const positionHere = (eYes * pm + eNo * (1 - pm)) * netFraction;
+    const elsewhere = cashOnly ? 0 : Math.max(invested - positionHere, 0);
+    const cash = u.balance;
+    const B = cash + elsewhere;
+    if (cash < 1) throw new Error(`Balance is M${r(cash)} — no mana available to bet.`);
     const pYes = f * pu + (1 - f) * pm;  // Kelly-adjusted P(YES), = fractional Kelly
     const side = pYes > pm ? "YES" : "NO";  // bet side follows from the estimate
 
@@ -122,12 +135,12 @@ $("go").onclick = async () => {
       const wNo  = B - M + eNo  + (side === "NO"  ? s : 0);
       return wYes > 0 && wNo > 0 ? pYes * Math.log(wYes) + (1 - pYes) * Math.log(wNo) : -Infinity;
     };
-    const M = Math.round(maximize(J, 0, B * (1 - 1e-9)));
+    const M = Math.round(maximize(J, 0, Math.min(B, cash) * (1 - 1e-9)));  // can only stake mana you hold
 
     const lines = [
-      ignoreLoans
-        ? `${u.name}: balance M${r(u.balance)} → bankroll M${r(B)} (loans ignored)`
-        : `${u.name}: balance M${r(u.balance)}, loans M${r(loans)} → bankroll M${r(B)}`,
+      cashOnly
+        ? `${u.name}: bankroll M${r(B)} (cash only)`
+        : `${u.name}: balance M${r(cash)} + positions M${r(elsewhere)} → bankroll M${r(B)}`,
       `Market: ${pct(pm)} — ${m.question}`,
     ];
     if (eYes || eNo) lines.push(`Your position: ${r(Math.abs(eYes - eNo))} ${eYes > eNo ? "YES" : "NO"} shares`);
