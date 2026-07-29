@@ -308,8 +308,9 @@
     const defPct  = parseFloat($("deferral-input").value);
     if (!user || !market || !isFinite(probPct)) return null;
     if (probPct < 0 || probPct > 100) return { error: "Probability estimate must be between 0 and 100." };
+    if (!isFinite(defPct) || defPct < 0 || defPct > 100) return { error: "Kelly factor must be between 0 and 100." };
 
-    const f = isFinite(defPct) ? Math.min(Math.max(defPct / 100, 0), 1) : 0.5;
+    const f = defPct / 100;
     const pMarket = cpmmProbability(market.pool, market.p);
     const pUser = probPct / 100;
     // Kelly factor: treat the "true" probability as f of the way from the
