@@ -177,10 +177,10 @@ for review:
   yours. Same is true of the "Expected profit" line. See §6.
 - It compounds to the market's **`closeTime`**. Markets frequently resolve
   earlier, which would raise the realized rate, so treat it as a lower bound.
-- `index.html` floors the horizon at one day (`tYears >= 1/365.25`);
-  `mini.html` and the userscript instead compute the raw value and cap the
-  *display* at `>10,000%`. Different mechanisms, same intent — flagged as an
-  inconsistency in §6.
+- All surfaces compute the raw horizon and cap the **display** at `>10,000%`;
+  none floors the horizon. Note the cap must be tested before any finite check,
+  because compounding a market that closes within hours overflows to `Infinity`
+  — which means "enormous", not "unknown".
 - `index.html` additionally shows expected **portfolio growth**,
   `exp((J(M) − J(0)) / tYears) − 1`, i.e. the annualized growth rate implied by
   the improvement in expected log wealth. This is the quantity Kelly actually
@@ -398,10 +398,10 @@ Ordered by how much I'd want a second opinion, not by severity.
    the recommendation would surface, though not every input combination is
    checked.
 
-5. **Annualization inconsistency.** `index.html` floors the horizon at one day;
-   `mini.html` and the userscript cap the display at `>10,000%`. Both avoid
-   absurd output, by different means, so the same market can show different
-   figures across surfaces near close.
+5. **`dedup.html` is a scratch A/B copy of `index.html`.** Until the experiment
+   is resolved — promote its CSS into `index.html`, or delete it — every fix
+   has to be applied twice, and it deploys to the live site as a stray page.
+   Resolving it is the cheapest item on this list.
 
 6. **The userscript runs in page context** (`@grant none`), so manifold.markets'
    own scripts share its global scope. It handles no credentials — no API key,
@@ -432,8 +432,9 @@ call and serve the repo locally, so no live Manifold access is needed):
 - `test_userscript.js` — 29 checks. Injects the userscript into a faked Manifold
   SPA: panel lifecycle, sliders and click-to-type, detection with a decoy
   localStorage record, theme switching, navigation, persistence.
-- `test_pages.js` — 22 checks. Serves the repo and drives `index.html`,
-  `dedup.html`, and `mini.html`: loading, recommendation, annualized return,
+- `test_pages.js` — 24 checks. Serves the repo and drives `index.html`,
+  `dedup.html`, and `mini.html`: loading, recommendation, annualized return
+  (including the near-close cap agreeing across surfaces),
   URL round-tripping, the API-key gate on PLACE BET, rejection of
   multiple-choice markets, framed compact mode, and a "no page errors"
   assertion that would catch a missing inline helper.

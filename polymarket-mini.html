@@ -78,7 +78,7 @@ function walkAsks(levels, budget) {
     else { shares += remaining / lvl.price; remaining = 0; }
     lastPrice = lvl.price;
   }
-  return { shares, newProb: lastPrice };
+  return { shares, fillPrice: lastPrice };
 }
 
 // golden-section maximization of the (concave) objective
@@ -98,10 +98,46 @@ function arr(v) {
   try { return JSON.parse(v); } catch (e) { return []; }
 }
 
-// "https://polymarket.com/event/some-slug?x#y" -> "some-slug"; bare slugs pass through
-function slug(text) {
+// Polymarket links look like /event/<event>[/<market>] or /market/<slug>; bare
+// slugs pass through. Returns market-slug candidates (most specific first) plus
+// the event slug, since a single-market event's market slug can differ from it.
+function slugCandidates(text) {
   const parts = text.trim().split(/[?#]/)[0].split("/").filter(Boolean);
-  return parts[parts.length - 1] || "";
+  const i = parts.indexOf("event");
+  if (i !== -1 && parts[i + 1]) {
+    const event = parts[i + 1], market = parts[i + 2];
+    return { market: market ? [market, event] : [event], event };
+  }
+  const last = parts[parts.length - 1];
+  return last ? { market: [last], event: last } : null;
+}
+
+const isBinary = m => {
+  const o = arr(m.outcomes).map(x => String(x).toLowerCase());
+  return o.includes("yes") && o.includes("no");
+};
+
+// Try each candidate against /markets, then fall back to resolving a
+// single-market event through /events (same lookup the userscript does).
+async function findMarket(text) {
+  const cand = slugCandidates(text);
+  if (!cand) return null;
+  for (const s of cand.market) {
+    try {
+      const found = await j(`${GAMMA}/markets?slug=${encodeURIComponent(s)}`);
+      const m = Array.isArray(found) ? found[0] : found;
+      if (m && isBinary(m)) return m;
+    } catch (e) { /* try the next candidate */ }
+  }
+  if (cand.event) {
+    try {
+      const events = await j(`${GAMMA}/events?slug=${encodeURIComponent(cand.event)}`);
+      const e = Array.isArray(events) ? events[0] : events;
+      const open = ((e && e.markets) || []).filter(m => isBinary(m) && !m.closed);
+      if (open.length === 1) return open[0];
+    } catch (e) { /* not an event */ }
+  }
+  return null;
 }
 
 $("go").onclick = async () => {
@@ -119,13 +155,11 @@ $("go").onclick = async () => {
 
     try { localStorage.setItem(LAST_WALLET_KEY, wallet); } catch (e) {}
 
-    const found = await j(`${GAMMA}/markets?slug=${encodeURIComponent(slug($("market").value))}`);
-    const m = Array.isArray(found) ? found[0] : found;
-    if (!m) throw new Error("Market not found.");
+    const m = await findMarket($("market").value);
+    if (!m) throw new Error("No binary (Yes/No) market found for that link.");
+    if (m.closed) throw new Error("This market has already closed.");
     const outcomes = arr(m.outcomes).map(o => String(o).toLowerCase());
     const yesIdx = outcomes.indexOf("yes"), noIdx = outcomes.indexOf("no");
-    if (yesIdx === -1 || noIdx === -1) throw new Error("Only binary (Yes/No) markets are supported.");
-    if (m.closed) throw new Error("This market has already closed.");
     const prices = arr(m.outcomePrices).map(parseFloat);
     const tokenIds = arr(m.clobTokenIds);
     const pm = prices[yesIdx];
@@ -164,12 +198,12 @@ $("go").onclick = async () => {
     if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
       lines.push("Recommended bet: $0 — your Kelly-adjusted estimate is too close to the market price.");
     } else {
-      const { shares, newProb } = walkAsks(levels, M);
+      const { shares, fillPrice } = walkAsks(levels, M);
       const pWin = side === "YES" ? pYes : 1 - pYes;
       lines.push(
         `Recommended bet: ${usd(M)} on ${side}`,
         `Shares bought: ${shares.toFixed(2)} (payout ${usd(shares)}, profit ${usd(shares - M)})`,
-        `Fill price: up to ${pct(newProb)} (approx., from current order book depth)`,
+        `Fill price: up to ${pct(fillPrice)} (approx., from current order book depth)`,
         `Expected profit: ${usd(pWin * shares - M)}`
       );
       // Annualized return on the money at risk, assuming payout at market close.

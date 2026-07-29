@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kellybrated for Polymarket
 // @namespace    https://github.com/DanielBerd/kellybrated
-// @version      1.1.2
+// @version      1.1.3
 // @description  Shows the Kelly-optimal bet size in a small panel on Polymarket binary market pages.
 // @author       Daniel & Claude
 // @match        https://polymarket.com/*
@@ -40,7 +40,6 @@
   }
 
   // ---------- order-book sizing (same math as polymarket-mini.html) ----------
-  // walk a token's ask book to price a market buy of `budget` USDC worth of shares
   // Parse a raw ask list into ascending price levels once, so the optimizer can
   // walk them repeatedly without re-sorting. `notional` is total book liquidity.
   function parseBook(asks) {
@@ -59,7 +58,7 @@
       else { shares += remaining / lvl.price; remaining = 0; }
       lastPrice = lvl.price;
     }
-    return { shares, newProb: lastPrice };
+    return { shares, fillPrice: lastPrice };
   }
   function maximize(f, lo, hi, iters = 100) {
     const phi = (Math.sqrt(5) - 1) / 2;
@@ -348,12 +347,12 @@
       if (Math.abs(pYes - pm) < 1e-9 || M < 0.01) { // USD is in cents, not Manifold's whole-mana units
         lines.push("Recommended bet: $0 — too close to the market price.");
       } else {
-        const { shares, newProb } = walkAsks(levels, M);
+        const { shares, fillPrice } = walkAsks(levels, M);
         const pWin = side === "YES" ? pYes : 1 - pYes;
         lines.push(
           `Recommended bet: ${usd(M)} on ${side}`,
           `Shares bought: ${shares.toFixed(2)} (payout ${usd(shares)}, profit ${usd(shares - M)})`,
-          `Fill price: up to ${pct(newProb)} (approx., from book depth)`,
+          `Fill price: up to ${pct(fillPrice)} (approx., from book depth)`,
           `Expected profit: ${usd(pWin * shares - M)}`
         );
         // Annualized return on the money at risk, assuming payout at market close.
